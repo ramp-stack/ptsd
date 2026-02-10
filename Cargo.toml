@@ -1,0 +1,20 @@
+[package]
+name = "ptsd"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "ptsd"
+path = "src/lib.rs"
+
+[dependencies]
+uuid = { version = "1.16.0", features = ["v4", "js"] }
+hex = "0.4.3"
+include_dir = "0.7.4"
+prism = {package = 'prism2', path="../prism"}
+chrono = "0.4.42"
+quircs = "0.10.3"
+qrcode = "0.14.1"
+imageproc = "0.25.0"
+image = "0.25.9"
+nsvg = "0.5.1"
