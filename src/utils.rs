@@ -97,6 +97,7 @@ impl Timestamp {
 //     }
 // }
 
+#[derive(Debug, Clone)]
 pub struct TitleSubtitle {
     pub title: String, 
     pub subtitle: Option<String>
@@ -124,4 +125,29 @@ impl Clone for Box<dyn ValidationFn> { fn clone(&self) -> Self { self.as_ref().c
 
 impl std::fmt::Debug for dyn ValidationFn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {  write!(f, "ValidationFn...") }
+}
+
+
+pub trait Callback: FnMut(&mut Context) + 'static {
+    fn clone_box(&self) -> Box<dyn Callback>;
+}
+
+impl PartialEq for dyn Callback{fn eq(&self, _: &Self) -> bool {true}}
+
+impl<F> Callback for F where F: FnMut(&mut Context) + Clone + 'static {
+    fn clone_box(&self) -> Box<dyn Callback> {
+        Box::new(self.clone())
+    }
+}
+
+impl Clone for Box<dyn Callback> {
+    fn clone(&self) -> Self {
+        self.as_ref().clone_box()
+    }
+}
+
+impl std::fmt::Debug for dyn Callback {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Clonable Closure")
+    }
 }

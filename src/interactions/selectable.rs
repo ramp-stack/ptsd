@@ -4,7 +4,9 @@ use prism::display::Enum;
 use prism::layout::Stack;
 use prism::{emitters, Context, Request, Hardware};
 
-#[derive(Component, Debug)]
+use crate::utils::Callback;
+
+#[derive(Component, Debug, Clone)]
 pub struct Selectable(Stack, emitters::Selectable<_Selectable>);
 impl OnEvent for Selectable {}
 impl Selectable {
@@ -13,7 +15,7 @@ impl Selectable {
         selected: impl Drawable + 'static,
         is_selected: bool,
         can_deselect: bool,
-        on_click: impl FnMut(&mut Context) + 'static,
+        on_click: impl FnMut(&mut Context) + Clone + 'static,
         group_id: uuid::Uuid,
     ) -> Self {
         let selectable = _Selectable::new(default, selected, is_selected, can_deselect, on_click);
@@ -30,8 +32,8 @@ impl std::ops::DerefMut for Selectable {
     fn deref_mut(&mut self) -> &mut Self::Target {&mut self.1.1}
 }
 
-#[derive(Component)]
-pub struct _Selectable(Stack, Enum, #[skip] Box<dyn FnMut(&mut Context)>, #[skip] bool);
+#[derive(Component, Clone)]
+pub struct _Selectable(Stack, Enum, #[skip] Box<dyn Callback>, #[skip] bool);
 
 impl _Selectable {
     pub fn new(
@@ -39,7 +41,7 @@ impl _Selectable {
         selected: impl Drawable + 'static,
         is_selected: bool,
         can_deselect: bool,
-        on_click: impl FnMut(&mut Context) + 'static
+        on_click: impl FnMut(&mut Context) + Clone + 'static
     ) -> Self {
         let start = if is_selected {"selected"} else {"default"};
         _Selectable(Stack::default(), Enum::new(vec![

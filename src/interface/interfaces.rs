@@ -1,4 +1,4 @@
-use prism::drawable::{Component, Drawable, SizedTree, RequestTree, Rect};
+use prism::drawable::{Component, Drawable, SizedTree, RequestTree, Rect, DynClone, clone_trait_object};
 use prism::Context;
 use prism::event::{OnEvent, Event};
 use prism::layout::{Area, Column, Offset, Padding, Size, Stack, Row};
@@ -9,7 +9,7 @@ use prism::canvas::{Area as CanvasArea, Item as CanvasItem};
 use crate::interface::navigation::{Pages, NavigationEvent, AppPage};
 use crate::theme::Theme;
 
-#[derive(Component, Debug)]
+#[derive(Component, Clone, Debug)]
 pub enum Interface {
     Mobile {
         layout: Column,
@@ -34,12 +34,13 @@ pub enum Interface {
 
 impl OnEvent for Interface {
     fn on_event(&mut self, _ctx: &mut Context, _sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
-        if let Interface::Mobile{keyboard, ..} = self {
-            if event.downcast_mut::<NavigationEvent>().is_some() {
-                keyboard.display(false);
-            } else if let Some(ShowKeyboard(b)) = event.downcast_ref::<ShowKeyboard>() {
-                keyboard.display(*b);
-            }
+        if let Some(event) = event.downcast_ref::<NavigationEvent>() {
+            println!("EVENT {:?}", event);
+        }
+
+        if let Interface::Mobile{keyboard, ..} = self 
+        && let Some(ShowKeyboard(b)) = event.downcast_ref::<ShowKeyboard>() {
+            keyboard.display(*b);
         }
 
         vec![event]
@@ -104,11 +105,15 @@ impl Event for ShowKeyboard {
     }
 }
 
-pub trait Body: Drawable + std::fmt::Debug + 'static {
+pub trait Body: Drawable + DynClone + std::fmt::Debug + 'static {
     fn pages(&mut self) -> &mut Pages;
 }
 
-pub trait Navigator: Drawable + std::fmt::Debug + 'static {}
+clone_trait_object!(Body);
+
+pub trait Navigator: Drawable + DynClone + std::fmt::Debug + 'static {}
+
+clone_trait_object!(Navigator);
 
 impl Drawable for Box<dyn Navigator> {
     fn request_size(&self) -> RequestTree {Drawable::request_size(&**self)}

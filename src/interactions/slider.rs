@@ -4,7 +4,10 @@ use prism::display::Bin;
 use prism::layout::{Stack, Size, Offset, Padding};
 use prism::{emitters, Context, Request, Hardware};
 
-#[derive(Component, Debug)]
+use std::sync::{Arc, Mutex};
+use crate::utils::Callback;
+
+#[derive(Component, Clone, Debug)]
 pub struct Slider(Stack, emitters::Slider<_Slider>);
 impl OnEvent for Slider {}
 impl Slider {
@@ -13,7 +16,7 @@ impl Slider {
         background: impl Drawable + 'static,
         foreground: impl Drawable + 'static,
         handle: impl Drawable + 'static,
-        callback: impl FnMut(&mut Context, f32) + 'static
+        callback: impl FnMut(&mut Context, f32) + Send + Sync + 'static
     ) -> Self {
         let slider = _Slider::new(start, background, foreground, handle, callback);
         Self(Stack::default(), emitters::Slider::new(slider))
@@ -29,7 +32,7 @@ impl std::ops::DerefMut for Slider {
     fn deref_mut(&mut self) -> &mut Self::Target {&mut self.1.1}
 }
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct _Slider {
     layout: Stack,
     pub background: Bin<Stack, Box<dyn Drawable>>,
@@ -45,7 +48,7 @@ impl _Slider {
         background: impl Drawable + 'static,
         foreground: impl Drawable + 'static,
         handle: impl Drawable + 'static,
-        callback: impl FnMut(&mut Context, f32) + 'static
+        callback: impl FnMut(&mut Context, f32) + Send + Sync + 'static
     ) -> Self {
         let min = Drawable::request_size(&handle).0.min_width();
         let width = Size::custom(move |widths: Vec<(f32, f32)>| (widths[0].0.min(min), f32::MAX));
@@ -60,7 +63,7 @@ impl _Slider {
             foreground: Bin(f_layout, Box::new(foreground)),
             handle: Bin(k_layout, Box::new(handle)),
             value: start, 
-            closure: Box::new(callback),
+            closure: Arc::new(Mutex::new(callback)),
         }
     }
 }
@@ -68,7 +71,7 @@ impl _Slider {
 impl OnEvent for _Slider {
     fn on_event(&mut self, ctx: &mut Context, sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
         if let Some(event) = event.downcast_ref::<event::Slider>() {
-            (self.closure)(ctx, self.value);
+            if let Ok(mut cb) = self.closure.lock() { (cb)(ctx, self.value); }
             match event {
                 event::Slider::Moved(x) => self.value = ((*x / sized.0.0) * 100.0).round() / 100.0,
                 event::Slider::Start(x) => {
@@ -93,4 +96,4 @@ impl std::fmt::Debug for _Slider {
     }
 }
 
-type SliderClosure = Box<dyn FnMut(&mut Context, f32)>;
+type SliderClosure = Arc<Mutex<dyn FnMut(&mut Context, f32) + Send + Sync + 'static>>;

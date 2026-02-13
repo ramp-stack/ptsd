@@ -4,7 +4,9 @@ use prism::display::Enum;
 use prism::layout::Stack;
 use prism::{emitters, Context, Request, Hardware};
 
-#[derive(Component, Debug)]
+use crate::utils::Callback;
+
+#[derive(Component, Debug, Clone)]
 pub struct Button(Stack, emitters::Button<_Button>);
 impl OnEvent for Button {}
 impl Button {
@@ -13,7 +15,7 @@ impl Button {
         hover: Option<impl Drawable + 'static>,
         pressed: Option<impl Drawable + 'static>,
         disabled: Option<impl Drawable + 'static>,
-        callback: impl FnMut(&mut Context) + 'static,
+        callback: impl FnMut(&mut Context) + Clone + 'static,
     ) -> Self {
         let button = _Button::new(default, hover, pressed, disabled, callback);
         Self(Stack::default(), emitters::Button::new(button))
@@ -29,8 +31,8 @@ impl std::ops::DerefMut for Button {
     fn deref_mut(&mut self) -> &mut Self::Target {&mut self.1.1}
 }
 
-#[derive(Component)]
-pub struct _Button(Stack, Enum, #[skip] bool, #[skip] Box<dyn FnMut(&mut Context)>);
+#[derive(Component, Clone)]
+pub struct _Button(Stack, Enum, #[skip] bool, #[skip] Box<dyn Callback>);
 
 impl _Button {
     pub fn new(
@@ -38,7 +40,7 @@ impl _Button {
         hover: Option<impl Drawable + 'static>,
         pressed: Option<impl Drawable + 'static>,
         disabled: Option<impl Drawable + 'static>,
-        callback: impl FnMut(&mut Context) + 'static,
+        callback: impl FnMut(&mut Context) + Clone + 'static,
     ) -> Self {
         let mut items: Vec<(String, Box<dyn Drawable>)> = Vec::new();
         items.push(("default".to_string(), Box::new(default)));

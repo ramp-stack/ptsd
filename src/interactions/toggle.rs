@@ -4,7 +4,9 @@ use prism::display::Enum;
 use prism::layout::Stack;
 use prism::{emitters, Context, Request, Hardware};
 
-#[derive(Component, Debug)]
+use std::sync::{Arc, Mutex};
+
+#[derive(Component, Clone, Debug)]
 pub struct Toggle(Stack, emitters::Button<_Toggle>);
 impl OnEvent for Toggle {}
 impl Toggle {
@@ -12,7 +14,7 @@ impl Toggle {
         on: impl Drawable + 'static,
         off: impl Drawable + 'static,
         is_selected: bool,
-        on_click: Box<dyn FnMut(&mut Context, bool)>,
+        on_click: impl FnMut(&mut Context, bool) + Send + Sync + 'static,
     ) -> Self {
         let toggle = _Toggle::new(on, off, is_selected, on_click);
         Self(Stack::default(), emitters::Button::new(toggle))
@@ -28,7 +30,7 @@ impl std::ops::DerefMut for Toggle {
     fn deref_mut(&mut self) -> &mut Self::Target {&mut self.1.1}
 }
 
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct _Toggle(Stack, Enum, #[skip] bool, #[skip] ToggleCallback);
 
 impl _Toggle {
@@ -36,12 +38,12 @@ impl _Toggle {
         on: impl Drawable + 'static,
         off: impl Drawable + 'static,
         is_selected: bool,
-        on_click: Box<dyn FnMut(&mut Context, bool)>,
+        on_click: impl FnMut(&mut Context, bool) + Send + Sync + 'static,
     ) -> Self {
         let start = if is_selected {"on"} else {"off"};
         _Toggle(Stack::default(), 
             Enum::new(vec![("on".to_string(), Box::new(on)), ("off".to_string(), Box::new(off))], start.to_string()), 
-            !is_selected, Box::new(on_click)
+            !is_selected, Arc::new(Mutex::new(on_click))
         )
     }
 }
@@ -51,7 +53,7 @@ impl OnEvent for _Toggle {
         if let Some(event::Button::Pressed(true)) = event.downcast_ref::<event::Button>() {
             self.2 = !self.2;
             ctx.send(Request::Hardware(Hardware::Haptic));
-            (self.3)(ctx, !self.2);
+            if let Ok(mut cb) = self.3.lock() { (cb)(ctx, !self.2); }
             match self.2 {
                 false => self.1.display("on"),
                 true => self.1.display("off"),
@@ -68,4 +70,4 @@ impl std::fmt::Debug for _Toggle {
 }
 
 
-type ToggleCallback = Box<dyn FnMut(&mut Context, bool)>;
+type ToggleCallback = Arc<Mutex<dyn FnMut(&mut Context, bool) + Send + Sync + 'static>>;

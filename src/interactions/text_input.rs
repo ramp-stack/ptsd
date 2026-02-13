@@ -6,7 +6,7 @@ use prism::{emitters, Context, Request, Hardware};
 
 // use crate::components::interface::ShowKeyboard;
 
-#[derive(Component, Debug)]
+#[derive(Component, Clone, Debug)]
 pub struct InputField(Stack, emitters::TextInput<_InputField>);
 impl OnEvent for InputField {}
 impl InputField {
@@ -32,7 +32,7 @@ impl std::ops::DerefMut for InputField {
     fn deref_mut(&mut self) -> &mut Self::Target {&mut self.1.1}
 }
 
-#[derive(Debug, Component)]
+#[derive(Debug, Component, Clone)]
 pub struct _InputField(Stack, Enum, pub Box<dyn Drawable>, #[skip] pub bool);
 
 impl _InputField {
