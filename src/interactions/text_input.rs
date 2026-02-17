@@ -19,7 +19,7 @@ impl InputField {
         height: f32,
     ) -> Self {
         let text_input = _InputField::new(default, focus, hover, error, content, height);
-        Self(Stack::default(), emitters::TextInput::new(text_input))
+        Self(Stack::default(), emitters::TextInput::new(text_input, true))
     }
 }
 
@@ -33,7 +33,7 @@ impl std::ops::DerefMut for InputField {
 }
 
 #[derive(Debug, Component, Clone)]
-pub struct _InputField(Stack, Enum, pub Box<dyn Drawable>, #[skip] pub bool);
+pub struct _InputField(Stack, Enum<Box<dyn Drawable>>, pub Box<dyn Drawable>, #[skip] pub bool);
 
 impl _InputField {
     pub fn new(

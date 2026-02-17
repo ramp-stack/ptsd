@@ -33,7 +33,7 @@ impl std::ops::DerefMut for Selectable {
 }
 
 #[derive(Component, Clone)]
-pub struct _Selectable(Stack, Enum, #[skip] Box<dyn Callback>, #[skip] bool);
+pub struct _Selectable(Stack, Enum<Box<dyn Drawable>>, #[skip] Box<dyn Callback>, #[skip] bool);
 
 impl _Selectable {
     pub fn new(

@@ -31,7 +31,7 @@ impl std::ops::DerefMut for Toggle {
 }
 
 #[derive(Component, Clone)]
-pub struct _Toggle(Stack, Enum, #[skip] bool, #[skip] ToggleCallback);
+pub struct _Toggle(Stack, Enum<Box<dyn Drawable>>, #[skip] bool, #[skip] ToggleCallback);
 
 impl _Toggle {
     pub fn new(

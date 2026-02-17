@@ -16,8 +16,9 @@ impl Button {
         pressed: Option<impl Drawable + 'static>,
         disabled: Option<impl Drawable + 'static>,
         callback: impl FnMut(&mut Context) + Clone + 'static,
+        disableable: bool,
     ) -> Self {
-        let button = _Button::new(default, hover, pressed, disabled, callback);
+        let button = _Button::new(default, hover, pressed, disabled, callback, disableable);
         Self(Stack::default(), emitters::Button::new(button))
     }
 }
@@ -32,7 +33,7 @@ impl std::ops::DerefMut for Button {
 }
 
 #[derive(Component, Clone)]
-pub struct _Button(Stack, Enum, #[skip] bool, #[skip] Box<dyn Callback>);
+pub struct _Button(Stack, Enum<Box<dyn Drawable>>, #[skip] bool, #[skip] Box<dyn Callback>, #[skip] bool);
 
 impl _Button {
     pub fn new(
@@ -41,13 +42,14 @@ impl _Button {
         pressed: Option<impl Drawable + 'static>,
         disabled: Option<impl Drawable + 'static>,
         callback: impl FnMut(&mut Context) + Clone + 'static,
+        disableable: bool,
     ) -> Self {
         let mut items: Vec<(String, Box<dyn Drawable>)> = Vec::new();
         items.push(("default".to_string(), Box::new(default)));
         if let Some(h) = hover { items.push(("hover".to_string(), Box::new(h))) }
         if let Some(p) = pressed { items.push(("pressed".to_string(), Box::new(p))) }
         if let Some(d) = disabled { items.push(("disabled".to_string(), Box::new(d))) }
-        _Button(Stack::default(), Enum::new(items, "default".to_string()), false, Box::new(callback))
+        _Button(Stack::default(), Enum::new(items, "default".to_string()), false, Box::new(callback), disableable)
     }
 
     pub fn disable(&mut self, disable: bool) {
@@ -64,7 +66,7 @@ impl _Button {
 
 impl OnEvent for _Button {
     fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
-        if let Some(event::Button::Disable(disable)) = event.downcast_ref::<event::Button>() {
+        if self.4 && let Some(event::Button::Disable(disable)) = event.downcast_ref::<event::Button>() {
             self.disable(*disable);
         } else if let Some(event) = event.downcast_ref::<event::Button>() && !self.2 {
             match event {

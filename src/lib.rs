@@ -13,6 +13,8 @@ pub mod theme;
 pub use theme::*;
 mod color;
 
+pub mod colors;
+
 pub mod interface;
 pub use interface::*;
 

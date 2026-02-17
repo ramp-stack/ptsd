@@ -9,13 +9,13 @@ use prism::display::{Bin, Opt, EitherOr, Enum};
 #[derive(Debug, Component, Clone)]
 pub struct Flow {
     layout: Stack,
-    current: Option<Box<dyn Drawable>>,
-    #[skip] stored: Vec<Box<dyn Drawable>>,
+    pub current: Option<Box<dyn AppPage>>,
+    #[skip] pub stored: Vec<Box<dyn AppPage>>,
     #[skip] index: usize
 }
 
 impl Flow {
-    pub fn new(mut pages: Vec<Box<dyn Drawable>>) -> Self {
+    pub fn new(mut pages: Vec<Box<dyn AppPage>>) -> Self {
         Flow {
             layout: Stack::default(),
             current: Some(pages.remove(0)),
@@ -56,21 +56,20 @@ impl OnEvent for Flow {
 #[derive(Debug, Component, Clone)]
 pub struct Pages {
     layout: Stack,
-    inner: EitherOr<Enum, Option<Box<dyn FlowContainer>>>,
+    inner: EitherOr<Enum<Box<dyn AppPage>>, Option<Box<dyn FlowContainer>>>,
     #[skip] history: Vec<Box<dyn FlowContainer>>
 }
 
 impl OnEvent for Pages {
     fn on_event(&mut self, ctx: &mut Context, sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
-        if let Some(event) = event.downcast_mut::<NavigationEvent>() {
-            println!("PAGES: EVENT {:?}", event);
-
-            match event {
-                NavigationEvent::Push(flow) => self.push(flow.take().unwrap()),
+        if let Some(e) = event.downcast_mut::<NavigationEvent>() {
+            match e {
+                NavigationEvent::Push(flow, ..) => self.push(flow.take().unwrap()),
                 NavigationEvent::Reset => self.root(None),
                 NavigationEvent::Root(root) => self.root(Some(root.to_string())),
-                _ => {}
+                _ => {return vec![event]}
             }
+            return vec![];
         }
 
         vec![event]
@@ -78,7 +77,7 @@ impl OnEvent for Pages {
 }
 
 impl Pages {
-    pub fn new(roots: Vec<(String, Box<dyn Drawable>)>) -> Self {
+    pub fn new(roots: Vec<(String, Box<dyn AppPage>)>) -> Self {
         let first = roots[0].0.to_string();
         let roots = Enum::new(roots, first);
         Pages {
@@ -102,7 +101,7 @@ impl Pages {
         self.inner.display_left(false);
     }
 
-    pub fn current(&mut self) -> &mut Box<dyn Drawable> {
+    pub fn current(&mut self) -> &mut Box<dyn AppPage> {
         if !self.history.is_empty() || self.inner.right().is_some() {
             self.inner.right().as_mut().unwrap().flow().current.as_mut().unwrap()
         } else {
@@ -111,6 +110,7 @@ impl Pages {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum NavigationEvent {
     Pop,
     Push(Option<Box<dyn FlowContainer>>),
@@ -120,67 +120,36 @@ pub enum NavigationEvent {
     Next,
 }
 
-impl std::fmt::Debug for NavigationEvent {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", match self {
-            NavigationEvent::Pop => "Pop".to_string(),
-            NavigationEvent::Push(f) => match f.is_some() {
-                true => "Push(Some(_))",
-                false => "Push(None)"
-            }.to_string(),
-            NavigationEvent::Reset => "Reset".to_string(),
-            NavigationEvent::Root(r) => format!("Root({r})"),
-            NavigationEvent::Error(e) => format!("Error({e})"),
-            NavigationEvent::Next => "Next".to_string(),
-        })
-    }
-}
-
-impl Clone for NavigationEvent {
-    fn clone(&self) -> Self {
-        match self {
-            NavigationEvent::Pop => NavigationEvent::Pop,
-            NavigationEvent::Push(_) => NavigationEvent::Push(None),
-            NavigationEvent::Reset => NavigationEvent::Reset,
-            NavigationEvent::Root(s) => NavigationEvent::Root(s.clone()),
-            NavigationEvent::Error(s) => NavigationEvent::Error(s.clone()),
-            NavigationEvent::Next => NavigationEvent::Next,
-        }
-    }
-}
-
 impl NavigationEvent {
     pub fn push(flow: impl FlowContainer + 'static) -> Self {
         NavigationEvent::Push(Some(Box::new(flow)))
     }
 }
-
 impl Event for NavigationEvent {
     fn pass(self: Box<Self>, _ctx: &mut Context, children: &[Area]) -> Vec<Option<Box<dyn Event>>> {
-        vec![Some(Box::new(_NavEvent(self)))]
-        
-        // let mut events = vec![];
-        // children.iter().for_each(|_| events.push(Some(self.clone() as Box<dyn Event>)));
-        // events.push(Some(self as Box<dyn Event>));
-        // events.push(None);
-        // events.into_iter().rev().collect::<Vec<_>>()
+        children.iter().map(|_| Some(self.clone() as Box<dyn Event>)).collect()
     }
 }
 
-
-#[derive(Debug)]
-pub struct _NavEvent(Box<NavigationEvent>);
-
-impl Event for _NavEvent {
-    fn pass(self: Box<Self>, _ctx: &mut Context, _children: &[Area]) -> Vec<Option<Box<dyn Event>>> {
-        vec![None, Some(self.0)]
-    }
-}
+// impl Event for NavigationEvent {
+//     fn pass(self: Box<Self>, _ctx: &mut Context, children: &[Area]) -> Vec<Option<Box<dyn Event>>> {
+//         println!("Children {:?}", children.len());
+//         children.iter().enumerate().map(|(i, _)| match *self {
+//             NavigationEvent::Push(_, ref v) => {
+//                 (!v.contains(&i)).then(|| {
+//                     let mut e: NavigationEvent = (*self).clone();
+//                     if let NavigationEvent::Push(_, ref mut v2) = e {v2.clear();}
+//                     Box::new(e) as Box<dyn Event>
+//                 })
+//             },
+//             _ =>  Some(Box::new((*self).clone()) as Box<dyn Event>),
+//         }).collect()
+//     }
+// }
 
 pub trait FlowContainer: Drawable + DynClone + std::fmt::Debug + 'static {
     fn flow(&mut self) -> &mut Flow;
 }
-
 
 clone_trait_object!(FlowContainer);
 
@@ -201,7 +170,7 @@ impl Drawable for Box<dyn FlowContainer> {
 }
 
 pub trait AppPage: Drawable + DynClone + std::fmt::Debug + 'static {}
-
+downcast_rs::impl_downcast!(AppPage);
 impl Drawable for Box<dyn AppPage> {
     fn request_size(&self) -> RequestTree {Drawable::request_size(&**self)}
     fn build(&self, size: (f32, f32), request: RequestTree) -> SizedTree {
