@@ -2,6 +2,9 @@
 name = "ptsd2"
 version = "0.1.0"
 edition = "2024"
+description = "Crate built to bridge design systems to Prism"
+license = "BSD-3-Clause"
+repository = "https://github.com/ramp-stack/ptsd"
 
 [lib]
 name = "ptsd"
