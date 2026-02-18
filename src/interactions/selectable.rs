@@ -21,6 +21,8 @@ impl Selectable {
         let selectable = _Selectable::new(default, selected, is_selected, can_deselect, on_click);
         Self(Stack::default(), emitters::Selectable::new(selectable, group_id))
     }
+
+    pub fn is_selected(&self) -> bool {self.1.1.4}
 }
 
 impl std::ops::Deref for Selectable {
@@ -33,7 +35,7 @@ impl std::ops::DerefMut for Selectable {
 }
 
 #[derive(Component, Clone)]
-pub struct _Selectable(Stack, Enum<Box<dyn Drawable>>, #[skip] Box<dyn Callback>, #[skip] bool);
+pub struct _Selectable(Stack, Enum<Box<dyn Drawable>>, #[skip] Box<dyn Callback>, #[skip] bool, #[skip] bool);
 
 impl _Selectable {
     pub fn new(
@@ -47,7 +49,7 @@ impl _Selectable {
         _Selectable(Stack::default(), Enum::new(vec![
             ("default".to_string(), Box::new(default)),
             ("selected".to_string(), Box::new(selected)),
-        ], start.to_string()), Box::new(on_click), can_deselect)
+        ], start.to_string()), Box::new(on_click), can_deselect, is_selected)
     }
 }
 
@@ -55,15 +57,20 @@ impl OnEvent for _Selectable {
     fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
         if let Some(event::Selectable::Selected(b)) = event.downcast_ref::<event::Selectable>() {
             match b {
-                false => self.1.display("default"),
+                false => {
+                    self.1.display("default");
+                    self.4 = false;
+                }
                 true => {
                     if self.3 && &self.1.current() == "selected" {
                         // already selected 
                         self.1.display("default");
+                        self.4 = false;
                         ctx.send(Request::Hardware(Hardware::Haptic));
                         (self.2)(ctx);
                     } else {
                         self.1.display("selected");
+                        self.4 = true;
                         ctx.send(Request::Hardware(Hardware::Haptic));
                         (self.2)(ctx);
                     }

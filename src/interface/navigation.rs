@@ -2,8 +2,8 @@ use prism::drawable::{Component, Drawable, SizedTree, RequestTree, Rect, DynClon
 use prism::{Context, Request};
 use prism::canvas::{Area as CanvasArea, Item as CanvasItem};
 use prism::event::{OnEvent, Event};
-use prism::layout::{Area, Column, Offset, Padding, Size, Stack, Row};
-use prism::display::{Bin, Opt, EitherOr, Enum};
+use prism::layout::{Area, Stack};
+use prism::display::{EitherOr, Enum};
 
 // should this be a trait so that "FlowStorage" and other variables stay alive?
 #[derive(Debug, Component, Clone)]
@@ -11,7 +11,7 @@ pub struct Flow {
     layout: Stack,
     pub current: Option<Box<dyn AppPage>>,
     #[skip] pub stored: Vec<Box<dyn AppPage>>,
-    #[skip] index: usize
+    #[skip] pub index: usize
 }
 
 impl Flow {
@@ -26,7 +26,7 @@ impl Flow {
 }
 
 impl OnEvent for Flow {
-    fn on_event(&mut self, ctx: &mut Context, sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
+    fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
         if let Some(event) = event.downcast_mut::<NavigationEvent>() {
             println!("Flow Event {:?}", event);
             let i = self.index;
@@ -56,12 +56,12 @@ impl OnEvent for Flow {
 #[derive(Debug, Component, Clone)]
 pub struct Pages {
     layout: Stack,
-    inner: EitherOr<Enum<Box<dyn AppPage>>, Option<Box<dyn FlowContainer>>>,
+    #[allow(clippy::type_complexity)] inner: EitherOr<Enum<Box<dyn AppPage>>, Option<Box<dyn FlowContainer>>>,
     #[skip] history: Vec<Box<dyn FlowContainer>>
 }
 
 impl OnEvent for Pages {
-    fn on_event(&mut self, ctx: &mut Context, sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
+    fn on_event(&mut self, _ctx: &mut Context, _sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
         if let Some(e) = event.downcast_mut::<NavigationEvent>() {
             match e {
                 NavigationEvent::Push(flow, ..) => self.push(flow.take().unwrap()),

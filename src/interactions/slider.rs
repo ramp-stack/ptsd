@@ -5,7 +5,6 @@ use prism::layout::{Stack, Size, Offset, Padding};
 use prism::{emitters, Context, Request, Hardware};
 
 use std::sync::{Arc, Mutex};
-use crate::utils::Callback;
 
 #[derive(Component, Clone, Debug)]
 pub struct Slider(Stack, emitters::Slider<_Slider>);

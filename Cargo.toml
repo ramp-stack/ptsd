@@ -11,7 +11,7 @@ path = "src/lib.rs"
 uuid = { version = "1.16.0", features = ["v4", "js"] }
 hex = "0.4.3"
 include_dir = "0.7.4"
-prism = {package = 'prism2', path="../prism"}
+prism = {package = 'prism2', version = "0.1.2"}
 chrono = "0.4.42"
 quircs = "0.10.3"
 qrcode = "0.14.1"

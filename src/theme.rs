@@ -1,11 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use image::RgbaImage;
-use include_dir::{DirEntry, Dir, include_dir};
+use include_dir::{DirEntry, include_dir};
 use prism::{canvas, Assets};
 
-use std::hash::Hash;
-use std::any::TypeId;
 use std::fmt;
 use std::fmt::Display;
 

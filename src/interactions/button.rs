@@ -1,4 +1,4 @@
-use prism::event::{self, OnEvent, Event, TickEvent};
+use prism::event::{self, OnEvent, Event};
 use prism::drawable::{Drawable, Component, SizedTree};
 use prism::display::Enum;
 use prism::layout::Stack;
