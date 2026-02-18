@@ -1084,7 +1084,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ptsd"
+name = "ptsd2"
 version = "0.1.0"
 dependencies = [
  "chrono",
