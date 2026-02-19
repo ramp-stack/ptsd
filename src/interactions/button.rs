@@ -66,9 +66,7 @@ impl _Button {
 
 impl OnEvent for _Button {
     fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
-        if self.4 && let Some(event::Button::Disable(disable)) = event.downcast_ref::<event::Button>() {
-            self.disable(*disable);
-        } else if let Some(event) = event.downcast_ref::<event::Button>() && !self.2 {
+        if let Some(event) = event.downcast_ref::<event::Button>() && !self.2 {
             match event {
                 event::Button::Hover(true) => self.1.display("hover"),
                 event::Button::Pressed(true) => {
@@ -77,6 +75,7 @@ impl OnEvent for _Button {
                     (self.3)(ctx);
                 }
                 event::Button::Pressed(false) => self.1.display("default"),
+                event::Button::Disable(disable) => if self.4 {self.disable(*disable);},
                 _ => self.1.display("default"),
             }
         }
