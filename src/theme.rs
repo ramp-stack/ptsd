@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use image::RgbaImage;
-use include_dir::{DirEntry, include_dir};
+use include_dir::{DirEntry, include_dir, Dir, File};
 use prism::{canvas, Assets};
 
 use std::fmt;
@@ -18,17 +18,17 @@ pub struct Theme {
 }
 
 impl Theme {
-    pub fn light(color: Color) -> Self {
-        Theme { colors: ColorResources::light(color), ..Default::default() }
+    pub fn light(assets: &Dir<'static>, color: Color) -> Self {
+        Theme { colors: ColorResources::light(color), icons: IconResources::new(assets), fonts: FontResources::default() }
     }
 
-    pub fn dark(color: Color) -> Self {
-        Theme { colors: ColorResources::dark(color), ..Default::default() }
+    pub fn dark(assets: &Dir<'static>, color: Color) -> Self {
+        Theme { colors: ColorResources::dark(color), icons: IconResources::new(assets), fonts: FontResources::default() }
     }
 
-    pub fn from(color: Color) -> (Self, bool) {
+    pub fn from(assets: &Dir<'static>, color: Color) -> (Self, bool) {
         let is_dark = color.is_high_contrast();
-        (if is_dark {Self::dark(color)} else {Self::light(color)}, is_dark)
+        (if is_dark {Self::dark(assets, color)} else {Self::light(assets, color)}, is_dark)
     }
 }
 
@@ -99,13 +99,43 @@ impl fmt::Display for TextSize { fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fm
 ///     - Icons must be located in `project/resources/icons/`.
 #[derive(Debug, Clone)]
 pub struct IconResources(HashMap<String, Arc<RgbaImage>>);
+impl IconResources {
+    pub fn new(assets: &Dir<'static>) -> Self {
+        let mut resources = IconResources::default();
+        resources.include(assets);
+        resources
+    }
 
+    fn include(&mut self, assets: &Dir<'static>) {
+        fn walk(map: &mut HashMap<String, Arc<RgbaImage>>, dir: &Dir<'static>) {
+            for entry in dir.entries() {
+                match entry {
+                    DirEntry::File(f)
+                        if f.path().extension().and_then(|e| e.to_str()) == Some("svg") =>
+                    {
+                        let name = f.path().to_str().unwrap();
+                        let name = name.strip_prefix("icons/").unwrap_or(name);
+                        let name = name.strip_suffix(".svg").unwrap_or(name)
+                            .replace(' ', "_");
+
+                        map.insert(name, Arc::new(Assets::load_svg(f.contents())));
+                    }
+                    DirEntry::Dir(d) => walk(map, d),
+                    _ => {}
+                }
+            }
+        }
+
+        walk(&mut self.0, &assets);
+    }
+}
 impl Default for IconResources {
     fn default() -> Self {
         let result = include_dir!("resources/icons").entries().iter().filter_map(|e| match e {
             DirEntry::File(f) => Some(f),
             _ => None,
         }).filter(|p| p.path().to_str().unwrap().ends_with(".svg")).collect::<Vec<_>>();
+
 
         Self(result.iter().map(|p| {
             let name = p.path().to_str().unwrap().strip_suffix(".svg").unwrap().replace(' ', "_");
@@ -120,6 +150,10 @@ impl IconResources {
             println!("Failed to get icon by name {name:?}");
             self.0.get("error").expect("IconResources corrupted.")
         }).clone()
+    }
+
+    pub fn all(&self) -> Vec<String> {
+        self.0.keys().cloned().collect()
     }
 }
 

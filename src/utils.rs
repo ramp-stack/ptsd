@@ -1,12 +1,14 @@
-use chrono::{DateTime, Local, Datelike, Timelike, TimeZone};
+use chrono::{Datelike, Timelike, TimeZone};
 use prism::{Context, drawable::Drawable};
+
+pub use chrono::{DateTime, Local, Utc};
 
 // #[derive(Clone, Copy, Deserialize, Serialize, Debug)]
 // pub struct InternetConnection(pub bool);
 
 /// `Timestamp` contains the date time in an easy-to-read format.
-#[derive(Clone, Debug, PartialEq, Default)]
-pub struct Timestamp(String, String);
+#[derive(Clone, Debug, PartialEq, Hash)]
+pub struct Timestamp(DateTime<Utc>);
 
 impl std::fmt::Display for Timestamp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -14,30 +16,26 @@ impl std::fmt::Display for Timestamp {
     }
 }
 
+impl Default for Timestamp {
+    fn default() -> Self {
+        Timestamp::new(Local::now())
+    }
+}
+
 impl Timestamp {
     /// Create a `Timestamp` from a local [`DateTime<Local>`].
-    ///
-    /// Formats as `M/D/YY` for the date and `H:MM AM/PM` for the time.
-    pub fn new(dt: DateTime<Local>) -> Self {
-        Timestamp(
-            dt.format("%-m/%-d/%y").to_string(), 
-            dt.format("%-I:%M %p").to_string()
-        )
-    }
+    pub fn new(dt: DateTime<Local>) -> Self {Timestamp(dt.into())}
 
     /// Create a `Timestamp` with date and time set as pending (`"-"`).
-    pub fn pending() -> Self {
-        Timestamp("-".to_string(), "-".to_string())
+    pub fn pending() -> (String, String) {
+        ("-".to_string(), "-".to_string())
     }
 
     /// Tries to convert the `Timestamp` into a `DateTime<Local>`.
     ///
     /// Parses the stored date and time strings using the format `M/D/YY H:MM AM/PM`.
-    pub fn to_datetime(&self) -> Option<DateTime<Local>> {
-        let combined = format!("{} {}", self.date(), self.time());
-        let format = "%m/%d/%y %I:%M %p";
-        let naive = chrono::NaiveDateTime::parse_from_str(&combined, format).expect("Could not parse time");
-        Local.from_local_datetime(&naive).single()
+    pub fn as_local(&self) -> DateTime<Local> {
+        self.0.into()
     }
 
     /// Returns a human-readable, "direct" representation of the timestamp.
@@ -51,16 +49,16 @@ impl Timestamp {
     ///
     /// Returns `None` if the timestamp cannot be converted to a local datetime.
     pub fn friendly(&self) -> String {
-        let dt = self.to_datetime().expect("Invalid date and time");
+        let dt = self.as_local();
         let today = Local::now().date_naive();
         let date = dt.date_naive();
         let hour = dt.hour();
         let minute = dt.minute();
         let (hour12, am_pm) = match hour == 0 {
-            true => (12, "am"),
-            false if hour < 12 => (hour, "am"),
-            false if hour == 12 => (12, "pm"),
-            false => (hour - 12, "pm")
+            true => (12, "AM"),
+            false if hour < 12 => (hour, "AM"),
+            false if hour == 12 => (12, "PM"),
+            false => (hour - 12, "PM")
         };
 
         let the_time = format!("{hour12}:{minute:02} {am_pm}");
@@ -75,7 +73,7 @@ impl Timestamp {
     }
 
     pub fn date_friendly(&self) -> String {
-        let dt = self.to_datetime().expect("Invalid date and time");
+        let dt = self.as_local();
         let today = Local::now().date_naive();
         let date = dt.date_naive();
 
@@ -86,9 +84,9 @@ impl Timestamp {
     }
 
     /// Returns the date.
-    pub fn date(&self) -> String {self.0.clone()}
+    pub fn date(&self) -> String {self.0.format("%-m/%-d/%y").to_string()}
     /// Returns the time.
-    pub fn time(&self) -> String {self.1.clone()}
+    pub fn time(&self) -> String {self.0.format("%-I:%M %p").to_string()}
 }
 
 // impl From<String> for PelicanError {

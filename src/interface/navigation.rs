@@ -28,7 +28,6 @@ impl Flow {
 impl OnEvent for Flow {
     fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
         if let Some(event) = event.downcast_mut::<NavigationEvent>() {
-            println!("Flow Event {:?}", event);
             let i = self.index;
             match event {
                 NavigationEvent::Pop => {
@@ -113,7 +112,7 @@ impl Pages {
 #[derive(Debug, Clone)]
 pub enum NavigationEvent {
     Pop,
-    Push(Option<Box<dyn FlowContainer>>),
+    Push(Option<Box<dyn FlowContainer>>, Vec<usize>),
     Reset,
     Root(String),
     Error(String),
@@ -122,12 +121,25 @@ pub enum NavigationEvent {
 
 impl NavigationEvent {
     pub fn push(flow: impl FlowContainer + 'static) -> Self {
-        NavigationEvent::Push(Some(Box::new(flow)))
+        NavigationEvent::Push(Some(Box::new(flow)), vec![])
     }
 }
+
 impl Event for NavigationEvent {
     fn pass(self: Box<Self>, _ctx: &mut Context, children: &[Area]) -> Vec<Option<Box<dyn Event>>> {
-        children.iter().map(|_| Some(self.clone() as Box<dyn Event>)).collect()
+        let v = match self.as_ref() {
+            NavigationEvent::Push(Some(_), v) => Some(v.clone()),
+            _ => None
+        };
+
+        if v.is_none() {
+            return children.iter().map(|_| Some(self.clone() as Box<dyn Event>)).collect();
+        }
+
+        let v = v.unwrap();
+
+        let mut x = Some(self as Box<dyn Event>);
+        return children.iter().enumerate().map(|(i, _)| if v.contains(&i) {None} else {x.take()}).collect();
     }
 }
 

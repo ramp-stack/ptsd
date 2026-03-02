@@ -6,6 +6,7 @@ use prism::display::Opt;
 use prism::canvas::{Area as CanvasArea, Item as CanvasItem};
 
 use crate::interface::navigation::Pages;
+use crate::navigation::NavigationEvent;
 
 #[derive(Component, Clone, Debug)]
 pub enum Interface {
@@ -31,12 +32,8 @@ pub enum Interface {
 
 
 impl OnEvent for Interface {
-    fn on_event(&mut self, _ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
-        // if let Some(NavigationEvent::Push(_, v)) = event.downcast_mut::<NavigationEvent>() {
-        //     println!("EVENT");
-        //     if let Interface::Mobile{..} = self {*v = vec![2, 3];}  
-        //     *v = vec![1];
-        // }
+    fn on_event(&mut self, _ctx: &mut Context, _sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
+        if let Some(NavigationEvent::Push(_, v)) = event.downcast_mut::<NavigationEvent>() {*v = vec![];}
 
         if let Interface::Mobile{keyboard, ..} = self 
         && let Some(ShowKeyboard(b)) = event.downcast_ref::<ShowKeyboard>() {
