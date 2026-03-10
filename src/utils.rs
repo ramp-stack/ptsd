@@ -1,4 +1,4 @@
-use chrono::{Datelike, Timelike, TimeZone};
+use chrono::{Datelike, Timelike};
 use prism::{Context, drawable::Drawable};
 
 pub use chrono::{DateTime, Local, Utc};
@@ -7,7 +7,7 @@ pub use chrono::{DateTime, Local, Utc};
 // pub struct InternetConnection(pub bool);
 
 /// `Timestamp` contains the date time in an easy-to-read format.
-#[derive(Clone, Debug, PartialEq, Hash)]
+#[derive(Clone, Debug, PartialEq, Hash, Eq)]
 pub struct Timestamp(DateTime<Utc>);
 
 impl std::fmt::Display for Timestamp {

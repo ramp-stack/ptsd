@@ -33,7 +33,7 @@ pub enum Interface {
 
 impl OnEvent for Interface {
     fn on_event(&mut self, _ctx: &mut Context, _sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
-        if let Some(NavigationEvent::Push(_, v)) = event.downcast_mut::<NavigationEvent>() {*v = vec![];}
+        if let Some(NavigationEvent::Push(_, v)) = event.downcast_mut::<NavigationEvent>() {*v = if let Interface::Desktop{navigator,..} = self && navigator.is_some() {vec![0]} else {vec![]};}
 
         if let Interface::Mobile{keyboard, ..} = self 
         && let Some(ShowKeyboard(b)) = event.downcast_ref::<ShowKeyboard>() {

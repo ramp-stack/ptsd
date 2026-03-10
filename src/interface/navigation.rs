@@ -64,7 +64,7 @@ impl OnEvent for Pages {
         if let Some(e) = event.downcast_mut::<NavigationEvent>() {
             match e {
                 NavigationEvent::Push(flow, ..) => self.push(flow.take().unwrap()),
-                NavigationEvent::Reset => self.root(None),
+                NavigationEvent::Reset => self.try_back(),
                 NavigationEvent::Root(root) => self.root(Some(root.to_string())),
                 _ => {return vec![event]}
             }
@@ -91,6 +91,14 @@ impl Pages {
         if let Some(p) = page { self.inner.left().display(&p); }
         self.history = vec![];
         *self.inner.right() = None;
+    }
+
+    pub fn try_back(&mut self) {
+        if let Some(flow) = self.history.pop() {
+            self.inner.right().replace(flow);
+        } else {
+            self.root(None);
+        }
     }
 
     pub fn push(&mut self, flow: Box<dyn FlowContainer>) {
@@ -139,7 +147,7 @@ impl Event for NavigationEvent {
         let v = v.unwrap();
 
         let mut x = Some(self as Box<dyn Event>);
-        return children.iter().enumerate().map(|(i, _)| if v.contains(&i) {None} else {x.take()}).collect();
+        children.iter().enumerate().map(|(i, _)| if v.contains(&i) {None} else {x.take()}).collect()
     }
 }
 

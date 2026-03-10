@@ -18,7 +18,19 @@ impl Button {
         callback: impl FnMut(&mut Context) + Clone + 'static,
         disableable: bool,
     ) -> Self {
-        let button = _Button::new(default, hover, pressed, disabled, callback, disableable);
+        let button = _Button::new(default, hover, pressed, disabled, callback, disableable, false);
+        Self(Stack::default(), emitters::Button::new(button))
+    }
+
+    pub fn new_triggers_on_release(
+        default: impl Drawable + 'static,
+        hover: Option<impl Drawable + 'static>,
+        pressed: Option<impl Drawable + 'static>,
+        disabled: Option<impl Drawable + 'static>,
+        callback: impl FnMut(&mut Context) + Clone + 'static,
+        disableable: bool,
+    ) -> Self {
+        let button = _Button::new(default, hover, pressed, disabled, callback, disableable, true);
         Self(Stack::default(), emitters::Button::new(button))
     }
 }
@@ -33,7 +45,7 @@ impl std::ops::DerefMut for Button {
 }
 
 #[derive(Component, Clone)]
-pub struct _Button(Stack, Enum<Box<dyn Drawable>>, #[skip] bool, #[skip] Box<dyn Callback>, #[skip] bool);
+pub struct _Button(Stack, Enum<Box<dyn Drawable>>, #[skip] bool, #[skip] Box<dyn Callback>, #[skip] bool, #[skip] bool);
 
 impl _Button {
     pub fn new(
@@ -43,13 +55,14 @@ impl _Button {
         disabled: Option<impl Drawable + 'static>,
         callback: impl FnMut(&mut Context) + Clone + 'static,
         disableable: bool,
+        triggers_on_release: bool,
     ) -> Self {
         let mut items: Vec<(String, Box<dyn Drawable>)> = Vec::new();
         items.push(("default".to_string(), Box::new(default)));
         if let Some(h) = hover { items.push(("hover".to_string(), Box::new(h))) }
         if let Some(p) = pressed { items.push(("pressed".to_string(), Box::new(p))) }
         if let Some(d) = disabled { items.push(("disabled".to_string(), Box::new(d))) }
-        _Button(Stack::default(), Enum::new(items, "default".to_string()), false, Box::new(callback), disableable)
+        _Button(Stack::default(), Enum::new(items, "default".to_string()), false, Box::new(callback), disableable, triggers_on_release)
     }
 
     pub fn disable(&mut self, disable: bool) {
@@ -72,11 +85,20 @@ impl OnEvent for _Button {
             match event {
                 event::Button::Hover(true) => self.1.display("hover"),
                 event::Button::Pressed(true) => {
-                    ctx.send(Request::Hardware(Hardware::Haptic));
                     self.1.display("pressed");
-                    (self.3)(ctx);
+                    if !self.5 {
+                        ctx.send(Request::Hardware(Hardware::Haptic));
+                        (self.3)(ctx);
+                    }
                 }
-                event::Button::Pressed(false) => self.1.display("default"),
+                event::Button::Pressed(false) => {
+                    println!("Button released");
+                    if self.5 {
+                        ctx.send(Request::Hardware(Hardware::Haptic));
+                        (self.3)(ctx);
+                    }
+                    self.1.display("default");
+                },
                 event::Button::Disable(_) => {},
                 _ => self.1.display("default"),
             }

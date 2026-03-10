@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use image::RgbaImage;
-use include_dir::{DirEntry, include_dir, Dir, File};
+use include_dir::{DirEntry, include_dir, Dir};
 use prism::{canvas, Assets};
 
 use std::fmt;
@@ -126,7 +126,7 @@ impl IconResources {
             }
         }
 
-        walk(&mut self.0, &assets);
+        walk(&mut self.0, assets);
     }
 }
 impl Default for IconResources {

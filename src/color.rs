@@ -20,8 +20,7 @@ impl Color {
 
     pub fn darken(&self, factor: f32) -> Color {
         let c: canvas::Color = (*self).into();
-        let f = |ch: u8| (ch as f32 * factor) as u8;
-        Color(canvas::Color(f(c.0), f(c.1), f(c.2), c.3))
+        Color(canvas::Color((c.0 as f32 * (factor * 1.3)) as u8, (c.1 as f32 * (factor * 1.1)) as u8, (c.2 as f32 * factor) as u8, c.3))
     }
 
     pub fn is_high_contrast(&self) -> bool {
