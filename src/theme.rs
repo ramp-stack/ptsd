@@ -129,6 +129,7 @@ impl IconResources {
         walk(&mut self.0, assets);
     }
 }
+
 impl Default for IconResources {
     fn default() -> Self {
         let result = include_dir!("resources/icons").entries().iter().filter_map(|e| match e {
