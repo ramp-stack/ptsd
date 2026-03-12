@@ -98,7 +98,10 @@ impl fmt::Display for TextSize { fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fm
 ///     - Icons must be `.svg` files.
 ///     - Icons must be located in `project/resources/icons/`.
 #[derive(Debug, Clone)]
-pub struct IconResources(HashMap<String, Arc<RgbaImage>>);
+pub struct IconResources{
+    stored: HashMap<String, Arc<RgbaImage>>,
+    public: HashMap<String, Arc<RgbaImage>>,
+}
 impl IconResources {
     pub fn new(assets: &Dir<'static>) -> Self {
         let mut resources = IconResources::default();
@@ -126,7 +129,7 @@ impl IconResources {
             }
         }
 
-        walk(&mut self.0, assets);
+        walk(&mut self.stored, assets);
     }
 }
 
@@ -138,23 +141,27 @@ impl Default for IconResources {
         }).filter(|p| p.path().to_str().unwrap().ends_with(".svg")).collect::<Vec<_>>();
 
 
-        Self(result.iter().map(|p| {
-            let name = p.path().to_str().unwrap().strip_suffix(".svg").unwrap().replace(' ', "_");
-            (name, Arc::new(Assets::load_svg(p.contents())))
-        }).collect())
+        IconResources {
+            stored: result.iter().map(|p| {
+                let name = p.path().to_str().unwrap().strip_suffix(".svg").unwrap().replace(' ', "_");
+                (name, Arc::new(Assets::load_svg(p.contents())))
+            }).collect(),
+            public: HashMap::default(),
+        }
     }
 }
 
 impl IconResources {
-    pub fn get(&self, name: &str) -> Arc<RgbaImage> {
-        self.0.get(name).unwrap_or_else(|| {
-            println!("Failed to get icon by name {name:?}");
-            self.0.get("error").expect("IconResources corrupted.")
-        }).clone()
+    pub fn insert<K: Display>(&mut self, key: K, icon: &str) {
+        self.public.insert(key.to_string(), self.stored.get(icon).unwrap_or_else(|| {
+            self.stored.get("ptsd_error").expect("IconResources corrupted.")
+        }).clone());
     }
 
-    pub fn all(&self) -> Vec<String> {
-        self.0.keys().cloned().collect()
+    pub fn get<K: Display>(&self, key: K) -> Arc<RgbaImage> {
+        self.public.get(&key.to_string()).unwrap_or_else(|| {
+            self.stored.get("ptsd_error").expect("IconResources corrupted.")
+        }).clone()
     }
 }
 
