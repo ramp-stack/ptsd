@@ -85,3 +85,9 @@ Because of this approach, PTSD can support a variety of UI frameworks built on t
 Example design systems built on top of PTSD can be found in the ecosystem, including **Pelican UI**, which demonstrates how PTSD can be used to build structured UI frameworks with consistent interactions and navigation.
 
 Developers exploring PTSD are encouraged to review these examples to understand how navigation, interactions, and theming are typically integrated into a full UI system.
+
+## Discord
+
+https://discord.gg/53ERRpS4S4
+
+Join the Discord server to ask questions, discuss development, or share projects.
