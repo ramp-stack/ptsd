@@ -8,7 +8,7 @@ pub use chrono::{DateTime, Local, Utc};
 
 /// `Timestamp` contains the date time in an easy-to-read format.
 #[derive(Clone, Debug, PartialEq, Hash, Eq)]
-pub struct Timestamp(DateTime<Utc>);
+pub struct Timestamp(Option<DateTime<Utc>>);
 
 impl std::fmt::Display for Timestamp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -18,13 +18,13 @@ impl std::fmt::Display for Timestamp {
 
 impl Default for Timestamp {
     fn default() -> Self {
-        Timestamp::new(Local::now())
+        Timestamp::new(Some(Local::now()))
     }
 }
 
 impl Timestamp {
     /// Create a `Timestamp` from a local [`DateTime<Local>`].
-    pub fn new(dt: DateTime<Local>) -> Self {Timestamp(dt.into())}
+    pub fn new(dt: Option<DateTime<Local>>) -> Self {Timestamp(dt.map(|s| s.into()))}
 
     /// Create a `Timestamp` with date and time set as pending (`"-"`).
     pub fn pending() -> (String, String) {
@@ -34,8 +34,8 @@ impl Timestamp {
     /// Tries to convert the `Timestamp` into a `DateTime<Local>`.
     ///
     /// Parses the stored date and time strings using the format `M/D/YY H:MM AM/PM`.
-    pub fn as_local(&self) -> DateTime<Local> {
-        self.0.into()
+    pub fn as_local(&self) -> Option<DateTime<Local>> {
+        self.0.map(|dt| dt.into())
     }
 
     /// Returns a human-readable, "direct" representation of the timestamp.
@@ -49,44 +49,46 @@ impl Timestamp {
     ///
     /// Returns `None` if the timestamp cannot be converted to a local datetime.
     pub fn friendly(&self) -> String {
-        let dt = self.as_local();
-        let today = Local::now().date_naive();
-        let date = dt.date_naive();
-        let hour = dt.hour();
-        let minute = dt.minute();
-        let (hour12, am_pm) = match hour == 0 {
-            true => (12, "AM"),
-            false if hour < 12 => (hour, "AM"),
-            false if hour == 12 => (12, "PM"),
-            false => (hour - 12, "PM")
-        };
+        if let Some(dt) = self.as_local() {
+            let today = Local::now().date_naive();
+            let date = dt.date_naive();
+            let hour = dt.hour();
+            let minute = dt.minute();
+            let (hour12, am_pm) = match hour == 0 {
+                true => (12, "AM"),
+                false if hour < 12 => (hour, "AM"),
+                false if hour == 12 => (12, "PM"),
+                false => (hour - 12, "PM")
+            };
 
-        let the_time = format!("{hour12}:{minute:02} {am_pm}");
+            let the_time = format!("{hour12}:{minute:02} {am_pm}");
 
-        match date == today {
-            true => the_time,
-            false if date == today.pred_opt().unwrap_or(today) => format!("yesterday, {the_time}"),
-            false if date.iso_week() == today.iso_week() => format!("{}", dt.format("%A")),
-            false if date.year() == today.year() => format!("{}", dt.format("%B %-d")),
-            false => format!("{}", dt.format("%m/%d/%y")),
-        }
+            match date == today {
+                true => the_time,
+                false if date == today.pred_opt().unwrap_or(today) => format!("yesterday, {the_time}"),
+                false if date.iso_week() == today.iso_week() => format!("{}", dt.format("%A")),
+                false if date.year() == today.year() => format!("{}", dt.format("%B %-d")),
+                false => format!("{}", dt.format("%m/%d/%y")),
+            }
+        } else {"Pending".to_string()}
     }
 
     pub fn date_friendly(&self) -> String {
-        let dt = self.as_local();
-        let today = Local::now().date_naive();
-        let date = dt.date_naive();
+        if let Some(dt) = self.as_local() {
+            let today = Local::now().date_naive();
+            let date = dt.date_naive();
 
-        if date == today {return "Today".to_string();}
-        if date.iso_week() == today.iso_week() { return format!("{}", dt.format("%A")); }
-        if date.year() == today.year() { return format!("{}", dt.format("%B %-d")); }
-        format!("{}", dt.format("%m/%d/%y"))
+            if date == today {return "Today".to_string();}
+            if date.iso_week() == today.iso_week() { return format!("{}", dt.format("%A")); }
+            if date.year() == today.year() { return format!("{}", dt.format("%B %-d")); }
+            format!("{}", dt.format("%m/%d/%y"))
+        } else {"Pending".to_string()}
     }
 
     /// Returns the date.
-    pub fn date(&self) -> String {self.0.format("%-m/%-d/%y").to_string()}
+    pub fn date(&self) -> String {self.0.map(|dt| dt.format("%-m/%-d/%y").to_string()).unwrap_or("Pending".to_string())}
     /// Returns the time.
-    pub fn time(&self) -> String {self.0.format("%-I:%M %p").to_string()}
+    pub fn time(&self) -> String {self.0.map(|dt| dt.format("%-I:%M %p").to_string()).unwrap_or("Pending".to_string())}
 }
 
 // impl From<String> for PelicanError {
@@ -111,11 +113,11 @@ impl TitleSubtitle {
 }
 
 
-pub trait ValidationFn: FnMut(&Vec<Box<dyn Drawable>>) -> bool + 'static {
+pub trait ValidationFn: FnMut(&mut Vec<Box<dyn Drawable>>) -> bool + 'static {
     fn clone_box(&self) -> Box<dyn ValidationFn>;
 }
 
-impl<F> ValidationFn for F where F: FnMut(&Vec<Box<dyn Drawable>>) -> bool + Clone + 'static {
+impl<F> ValidationFn for F where F: FnMut(&mut Vec<Box<dyn Drawable>>) -> bool + Clone + 'static {
     fn clone_box(&self) -> Box<dyn ValidationFn> { Box::new(self.clone()) }
 }
 
@@ -124,7 +126,6 @@ impl Clone for Box<dyn ValidationFn> { fn clone(&self) -> Self { self.as_ref().c
 impl std::fmt::Debug for dyn ValidationFn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {  write!(f, "ValidationFn...") }
 }
-
 
 pub trait Callback: FnMut(&mut Context) + 'static {
     fn clone_box(&self) -> Box<dyn Callback>;
