@@ -45,7 +45,7 @@ impl std::ops::DerefMut for Button {
 }
 
 #[derive(Component, Clone)]
-pub struct _Button(Stack, Enum<Box<dyn Drawable>>, #[skip] bool, #[skip] Box<dyn Callback>, #[skip] bool, #[skip] bool);
+pub struct _Button(Stack, Enum<Box<dyn Drawable>>, #[skip] bool, #[skip] Box<dyn Callback>, #[skip] bool, #[skip] bool, #[skip] bool);
 
 impl _Button {
     pub fn new(
@@ -62,7 +62,7 @@ impl _Button {
         if let Some(h) = hover { items.push(("hover".to_string(), Box::new(h))) }
         if let Some(p) = pressed { items.push(("pressed".to_string(), Box::new(p))) }
         if let Some(d) = disabled { items.push(("disabled".to_string(), Box::new(d))) }
-        _Button(Stack::default(), Enum::new(items, "default".to_string()), false, Box::new(callback), disableable, triggers_on_release)
+        _Button(Stack::default(), Enum::new(items, "default".to_string()), false, Box::new(callback), disableable, triggers_on_release, false)
     }
 
     pub fn disable(&mut self, disable: bool) {
@@ -75,32 +75,40 @@ impl _Button {
             }
         }
     }
+
+    pub fn on_click(&mut self) -> &mut Box<dyn Callback> {&mut self.3}
 }
 
 impl OnEvent for _Button {
     fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
-        if let Some(event::Button::Disable(disable)) = event.downcast_ref::<event::Button>() && self.4 {
-            self.disable(*disable);
-        } else if let Some(event) = event.downcast_ref::<event::Button>() && !self.2 {
-            match event {
-                event::Button::Hover(true) => self.1.display("hover"),
-                event::Button::Pressed(true) => {
-                    self.1.display("pressed");
-                    if !self.5 {
-                        ctx.send(Request::Hardware(Hardware::Haptic));
-                        (self.3)(ctx);
+        if let Some(event) = event.downcast_ref::<event::Button>() {
+            if let event::Button::Disable(disable) = event {
+                if self.4 { self.disable(*disable);} 
+            } else if !self.2 {
+                match event {
+                    event::Button::Hover(true) if !self.6 => self.1.display("hover"),
+                    event::Button::Pressed(true) => {
+                        self.6 = true;
+                        self.1.display("pressed");
+                        if !self.5 {
+                            ctx.send(Request::Hardware(Hardware::Haptic));
+                            (self.3)(ctx);
+                        }
                     }
+                    event::Button::Pressed(false) => {
+                        self.6 = false;
+                        if self.5 {
+                            ctx.send(Request::Hardware(Hardware::Haptic));
+                            (self.3)(ctx);
+                        }
+                        self.1.display("default");
+                    },
+                    event::Button::Hover(false) if !self.6 => {
+                        self.1.display("default");
+                    }
+                    // event::Button::Disable(_) => {},
+                    _ => {} //self.1.display("default"),
                 }
-                event::Button::Pressed(false) => {
-                    println!("Button released");
-                    if self.5 {
-                        ctx.send(Request::Hardware(Hardware::Haptic));
-                        (self.3)(ctx);
-                    }
-                    self.1.display("default");
-                },
-                event::Button::Disable(_) => {},
-                _ => self.1.display("default"),
             }
         }
 

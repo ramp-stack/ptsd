@@ -1,6 +1,6 @@
 use prism::drawable::{Component, Drawable, SizedTree, RequestTree, Rect, DynClone, clone_trait_object};
-use prism::Context;
-use prism::event::{OnEvent, Event};
+use prism::{Context, IS_MOBILE};
+use prism::event::{OnEvent, Event, TickEvent};
 use prism::layout::{Area, Column, Offset, Padding, Size, Row};
 use prism::display::Opt;
 use prism::canvas::{Area as CanvasArea, Item as CanvasItem};
@@ -33,11 +33,20 @@ pub enum Interface {
 
 impl OnEvent for Interface {
     fn on_event(&mut self, _ctx: &mut Context, _sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
+        if event.downcast_mut::<NavigationEvent>().is_some() && let Interface::Mobile{keyboard, ..} = self {
+            keyboard.display(false);
+        }
+        
         if let Some(NavigationEvent::Push(_, v)) = event.downcast_mut::<NavigationEvent>() {*v = if let Interface::Desktop{navigator,..} = self && navigator.is_some() {vec![0]} else {vec![]};}
 
         if let Interface::Mobile{keyboard, ..} = self 
         && let Some(ShowKeyboard(b)) = event.downcast_ref::<ShowKeyboard>() {
             keyboard.display(*b);
+        }
+
+        if IS_MOBILE && event.downcast_ref::<TickEvent>().is_some() {
+            let is_root = self.pages().is_root();
+            if let Some(s) = self.navigator().as_mut() { s.display(is_root) }
         }
 
         vec![event]
@@ -54,12 +63,8 @@ impl Interface {
     }
 
     pub fn mobile(navigator: Option<Box<dyn Navigator>>, body: impl Body + 'static, keyboard: impl Drawable + 'static) -> Self {
-        // let (_left, _right, top, bottom) = ctx.send(Request::Hardware(Hardware::SafeAreaInsets));
-        let (top, bottom) = (18.0, 18.0);
-        let layout = Column::new(0.0, Offset::Center, Size::Fit, Padding(0.0, top, 0.0, bottom), None);
-
         Interface::Mobile {
-            layout,
+            layout: Column::new(0.0, Offset::Center, Size::Fit, Padding::default(), None),
             body: Box::new(body),
             keyboard: Opt::new(Box::new(keyboard), false),
             navigator: navigator.map(|n| Opt::new(n, true)),

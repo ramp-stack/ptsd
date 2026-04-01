@@ -1,8 +1,8 @@
 use prism::drawable::{Component, Drawable, SizedTree, RequestTree, Rect, DynClone, clone_trait_object};
-use prism::{Context, Request};
+use prism::{Context, Request, Hardware};
 use prism::canvas::{Area as CanvasArea, Item as CanvasItem};
 use prism::event::{OnEvent, Event};
-use prism::layout::{Area, Stack};
+use prism::layout::{Area, Stack, Offset, Size, Padding};
 use prism::display::{EitherOr, Enum};
 
 // should this be a trait so that "FlowStorage" and other variables stay alive?
@@ -52,16 +52,40 @@ impl OnEvent for Flow {
     }
 }
 
+#[derive(Debug, Clone, Component)]
+pub struct History(Stack, Vec<Box<dyn FlowContainer>>);
+impl OnEvent for History {
+    fn on_event(&mut self, _ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
+        if event.downcast_ref::<NavigationEvent>().is_some() { return vec![]; }
+        vec![event]
+    }
+}
+
+// impl Component for History {
+//     fn children(&self) -> Vec<&dyn Drawable> {vec![]}
+//     fn children_mut(&mut self) -> Vec<&mut dyn Drawable> {vec![]}
+//     fn layout(&self) -> &dyn prism::layout::Layout {&self.0}
+// }
+
+impl History {
+    pub fn new(h: Vec<Box<dyn FlowContainer>>) -> Self {
+        History(Stack::new(Offset::Start, Offset::Start, Size::Static(0.0), Size::Static(0.0), Padding::default()), h)
+    }
+
+    pub fn inner(&mut self) -> &mut Vec<Box<dyn FlowContainer>> {&mut self.1}
+}
+
 #[derive(Debug, Component, Clone)]
 pub struct Pages {
     layout: Stack,
     #[allow(clippy::type_complexity)] inner: EitherOr<Enum<Box<dyn AppPage>>, Option<Box<dyn FlowContainer>>>,
-    #[skip] history: Vec<Box<dyn FlowContainer>>
+    history: History,
 }
 
 impl OnEvent for Pages {
-    fn on_event(&mut self, _ctx: &mut Context, _sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
+    fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
         if let Some(e) = event.downcast_mut::<NavigationEvent>() {
+            ctx.send(Request::Hardware(Hardware::StopCamera));
             match e {
                 NavigationEvent::Push(flow, ..) => self.push(flow.take().unwrap()),
                 NavigationEvent::Reset => self.try_back(),
@@ -82,19 +106,19 @@ impl Pages {
         Pages {
             layout: Stack::default(),
             inner: EitherOr::new(roots, None),
-            history: Vec::new(),
+            history: History::new(Vec::new()),
         }
     }
 
     pub fn root(&mut self, page: Option<String>) {
         self.inner.display_left(true);
         if let Some(p) = page { self.inner.left().display(&p); }
-        self.history = vec![];
+        *self.history.inner() = vec![];
         *self.inner.right() = None;
     }
 
     pub fn try_back(&mut self) {
-        if let Some(flow) = self.history.pop() {
+        if let Some(flow) = self.history.inner().pop() {
             self.inner.right().replace(flow);
         } else {
             self.root(None);
@@ -103,18 +127,20 @@ impl Pages {
 
     pub fn push(&mut self, flow: Box<dyn FlowContainer>) {
         if let Some(old) = self.inner.right().replace(flow) { 
-            self.history.push(old);
+            self.history.inner().push(old);
         }
         self.inner.display_left(false);
     }
 
     pub fn current(&mut self) -> &mut Box<dyn AppPage> {
-        if !self.history.is_empty() || self.inner.right().is_some() {
+        if !self.history.inner().is_empty() || self.inner.right().is_some() {
             self.inner.right().as_mut().unwrap().flow().current.as_mut().unwrap()
         } else {
             self.inner.left().drawable().inner()
         }
     }
+
+    pub fn is_root(&self) -> bool { self.inner.is_left() }
 }
 
 #[derive(Debug, Clone)]
@@ -140,9 +166,7 @@ impl Event for NavigationEvent {
             _ => None
         };
 
-        if v.is_none() {
-            return children.iter().map(|_| Some(self.clone() as Box<dyn Event>)).collect();
-        }
+        if v.is_none() { return children.iter().map(|_| Some(self.clone() as Box<dyn Event>)).collect(); }
 
         let v = v.unwrap();
 

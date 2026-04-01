@@ -3,11 +3,11 @@ use prism::drawable::{Drawable, Component, SizedTree};
 use prism::display::Enum;
 use prism::layout::{Stack, Size, Offset, Padding};
 use prism::{emitters, Context, Request, Hardware};
-
+use crate::interfaces::ShowKeyboard;
 // use crate::components::interface::ShowKeyboard;
 
 #[derive(Component, Clone, Debug)]
-pub struct InputField(Stack, emitters::TextInput<_InputField>);
+pub struct InputField(Stack, emitters::Selectable<emitters::TextInput<_InputField>>);
 impl OnEvent for InputField {}
 impl InputField {
     pub fn new(
@@ -25,11 +25,11 @@ impl InputField {
 
 impl std::ops::Deref for InputField {
     type Target = _InputField;
-    fn deref(&self) -> &Self::Target {&self.1.1}
+    fn deref(&self) -> &Self::Target {&self.1.1.1}
 }
 
 impl std::ops::DerefMut for InputField {
-    fn deref_mut(&mut self) -> &mut Self::Target {&mut self.1.1}
+    fn deref_mut(&mut self) -> &mut Self::Target {&mut self.1.1.1}
 }
 
 #[derive(Debug, Component, Clone)]
@@ -57,11 +57,13 @@ impl _InputField {
     }
 
     pub fn error(&mut self, error: bool) {
-        self.3 = error;
+        if self.3 != error {
+            self.3 = error;
 
-        match self.3 {
-            true => self.1.display("error"),
-            false => self.1.display("default")
+            match self.3 {
+                true => self.1.display("error"),
+                false => self.1.display("default")
+            }
         }
     }
 }
@@ -70,18 +72,17 @@ impl OnEvent for _InputField {
     fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
         if let Some(e) = event.downcast_ref::<event::TextInput>() {
             match e {
-                event::TextInput::Hover(true) => self.1.display("hover"),
+                event::TextInput::Hover(true) if !self.3 => self.1.display("hover"),
                 event::TextInput::Focused(true) => {
-                    // ctx.send(Request::Event(Box::new(ShowKeyboard(true))));
+                    ctx.send(Request::Event(Box::new(ShowKeyboard(true))));
                     ctx.send(Request::Hardware(Hardware::Haptic));
                     self.1.display("focus");
                 },
-                event::TextInput::Hover(false) => self.1.display(if self.3 {"error"} else {"default"}),
                 event::TextInput::Focused(false) => {
                     // ctx.trigger_event(ShowKeyboard(false));
                     self.1.display(if self.3 {"error"} else {"default"});
                 },
-                _ => {}
+                _ => self.1.display("default"),
             }
         }
         

@@ -1020,9 +1020,9 @@ dependencies = [
 
 [[package]]
 name = "prism2"
-version = "0.1.4"
+version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c28f24a6c548ed96b5b933c1065f3889a3d0376004b77fae5a0cd1a946754cb9"
+checksum = "0d1fb14943396747f8f0d61249e6d47fe08136633480131e8b75032331d26c51"
 dependencies = [
  "anyanymap",
  "downcast-rs",
@@ -1085,7 +1085,7 @@ dependencies = [
 
 [[package]]
 name = "ptsd2"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "chrono",
  "downcast-rs",

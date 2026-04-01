@@ -73,6 +73,14 @@ impl Timestamp {
         } else {"Pending".to_string()}
     }
 
+    pub fn date(&self) -> String {
+        self.as_local().map(|dt| dt.format("%-m/%-d/%y").to_string()).unwrap_or("Pending".to_string())
+    }
+
+    pub fn time(&self) -> String {
+        self.as_local().map(|dt| dt.format("%-I:%M %p").to_string()).unwrap_or("Pending".to_string())
+    }
+    
     pub fn date_friendly(&self) -> String {
         if let Some(dt) = self.as_local() {
             let today = Local::now().date_naive();
@@ -84,11 +92,6 @@ impl Timestamp {
             format!("{}", dt.format("%m/%d/%y"))
         } else {"Pending".to_string()}
     }
-
-    /// Returns the date.
-    pub fn date(&self) -> String {self.0.map(|dt| dt.format("%-m/%-d/%y").to_string()).unwrap_or("Pending".to_string())}
-    /// Returns the time.
-    pub fn time(&self) -> String {self.0.map(|dt| dt.format("%-I:%M %p").to_string()).unwrap_or("Pending".to_string())}
 }
 
 // impl From<String> for PelicanError {
