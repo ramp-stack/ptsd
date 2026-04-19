@@ -153,3 +153,4 @@ impl std::fmt::Debug for dyn Callback {
         write!(f, "Clonable Closure")
     }
 }
+
