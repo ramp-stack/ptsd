@@ -2,7 +2,7 @@ use prism::event::{self, OnEvent, Event};
 use prism::drawable::{Drawable, Component, SizedTree};
 use prism::display::Enum;
 use prism::layout::Stack;
-use prism::{emitters, Context, Request, Hardware};
+use prism::{emitters, Context};
 
 use crate::utils::Callback;
 
@@ -91,14 +91,14 @@ impl OnEvent for _Button {
                         self.6 = true;
                         self.1.display("pressed");
                         if !self.5 {
-                            ctx.send(Request::Hardware(Hardware::Haptic));
+                            ctx.trigger_haptic();
                             (self.3)(ctx);
                         }
                     }
                     event::Button::Pressed(false) => {
                         self.6 = false;
                         if self.5 {
-                            ctx.send(Request::Hardware(Hardware::Haptic));
+                            ctx.trigger_haptic();
                             (self.3)(ctx);
                         }
                         self.1.display("default");

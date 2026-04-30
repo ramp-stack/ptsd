@@ -2,7 +2,7 @@ use prism::event::{self, OnEvent, Event, TickEvent};
 use prism::drawable::{Drawable, Component, SizedTree};
 use prism::display::Bin;
 use prism::layout::{Stack, Size, Offset, Padding};
-use prism::{emitters, Context, Request, Hardware};
+use prism::{emitters, Context};
 
 use std::sync::{Arc, Mutex};
 
@@ -75,7 +75,7 @@ impl OnEvent for _Slider {
                 event::Slider::Moved(x) => self.value = ((*x / sized.0.0) * 100.0).round() / 100.0,
                 event::Slider::Start(x) => {
                     self.value = ((*x / sized.0.0) * 100.0).round() / 100.0;
-                    ctx.send(Request::Hardware(Hardware::Haptic));
+                    ctx.trigger_haptic();
                 },
             }
         } else if event.downcast_ref::<TickEvent>().is_some() {

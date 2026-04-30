@@ -2,7 +2,7 @@ use prism::event::{self, OnEvent, Event};
 use prism::drawable::{Drawable, Component, SizedTree};
 use prism::display::Enum;
 use prism::layout::{Stack, Size, Offset, Padding};
-use prism::{emitters, Context, Request, Hardware};
+use prism::{emitters, Context};
 use crate::interfaces::ShowKeyboard;
 // use crate::components::interface::ShowKeyboard;
 
@@ -74,8 +74,8 @@ impl OnEvent for _InputField {
             match e {
                 event::TextInput::Hover(true) if !self.3 => self.1.display("hover"),
                 event::TextInput::Focused(true) => {
-                    ctx.send(Request::Event(Box::new(ShowKeyboard(true))));
-                    ctx.send(Request::Hardware(Hardware::Haptic));
+                    ctx.emit(ShowKeyboard(true));
+                    ctx.trigger_haptic();
                     self.1.display("focus");
                 },
                 event::TextInput::Focused(false) => {

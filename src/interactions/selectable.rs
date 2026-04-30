@@ -2,7 +2,7 @@ use prism::event::{self, OnEvent, Event};
 use prism::drawable::{Drawable, Component, SizedTree};
 use prism::display::Enum;
 use prism::layout::Stack;
-use prism::{emitters, Context, Request, Hardware};
+use prism::{emitters, Context};
 
 use crate::utils::Callback;
 
@@ -66,12 +66,12 @@ impl OnEvent for _Selectable {
                         // already selected 
                         self.1.display("default");
                         self.4 = false;
-                        ctx.send(Request::Hardware(Hardware::Haptic));
+                        ctx.trigger_haptic();
                         (self.2)(ctx);
                     } else {
                         self.1.display("selected");
                         self.4 = true;
-                        ctx.send(Request::Hardware(Hardware::Haptic));
+                        ctx.trigger_haptic();
                         (self.2)(ctx);
                     }
                 }

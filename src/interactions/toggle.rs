@@ -2,7 +2,7 @@ use prism::event::{self, OnEvent, Event};
 use prism::drawable::{Drawable, Component, SizedTree};
 use prism::display::Enum;
 use prism::layout::Stack;
-use prism::{emitters, Context, Request, Hardware};
+use prism::{emitters, Context};
 
 use std::sync::{Arc, Mutex};
 
@@ -52,7 +52,7 @@ impl OnEvent for _Toggle {
     fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
         if let Some(event::Button::Pressed(true)) = event.downcast_ref::<event::Button>() {
             self.2 = !self.2;
-            ctx.send(Request::Hardware(Hardware::Haptic));
+            ctx.trigger_haptic();
             if let Ok(mut cb) = self.3.lock() { (cb)(ctx, !self.2); }
             match self.2 {
                 false => self.1.display("on"),

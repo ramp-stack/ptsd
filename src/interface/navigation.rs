@@ -1,5 +1,5 @@
 use prism::drawable::{Component, Drawable, SizedTree, RequestTree, Rect, DynClone, clone_trait_object};
-use prism::{Context, Request, Hardware};
+use prism::{Context, Request};
 use prism::canvas::{Area as CanvasArea, Item as CanvasItem};
 use prism::event::{OnEvent, Event};
 use prism::layout::{Area, Stack, Offset, Size, Padding};
@@ -33,7 +33,7 @@ impl OnEvent for Flow {
                 NavigationEvent::Pop => {
                     if self.index == 0 {
                         self.index = 0;
-                        ctx.send(Request::event(NavigationEvent::Reset));
+                        ctx.emit(NavigationEvent::Reset);
                     } else {
                         self.index -= 1;
                     }
@@ -85,7 +85,7 @@ pub struct Pages {
 impl OnEvent for Pages {
     fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
         if let Some(e) = event.downcast_mut::<NavigationEvent>() {
-            ctx.send(Request::Hardware(Hardware::StopCamera));
+            ctx.stop_camera();
             match e {
                 NavigationEvent::Push(flow, ..) => self.push(flow.take().unwrap()),
                 NavigationEvent::Reset => self.try_back(),
@@ -214,6 +214,7 @@ impl Drawable for Box<dyn FlowContainer> {
 }
 
 pub trait AppPage: Drawable + DynClone + std::fmt::Debug + 'static {}
+
 downcast_rs::impl_downcast!(AppPage);
 impl Drawable for Box<dyn AppPage> {
     fn request_size(&self) -> RequestTree {Drawable::request_size(&**self)}
