@@ -90,6 +90,7 @@ impl OnEvent for Pages {
                 NavigationEvent::Push(flow, ..) => self.push(flow.take().unwrap()),
                 NavigationEvent::Reset => self.try_back(),
                 NavigationEvent::Root(root) => self.root(Some(root.to_string())),
+                NavigationEvent::Restart(flow) => self.restart(flow.take().unwrap()),
                 _ => {return vec![event]}
             }
             return vec![];
@@ -132,6 +133,11 @@ impl Pages {
         self.inner.display_left(false);
     }
 
+    pub fn restart(&mut self, flow: Box<dyn FlowContainer>) {
+        self.try_back();
+        self.push(flow);
+    }
+
     pub fn current(&mut self) -> &mut Box<dyn AppPage> {
         if !self.history.inner().is_empty() || self.inner.right().is_some() {
             self.inner.right().as_mut().unwrap().flow().current.as_mut().unwrap()
@@ -147,6 +153,7 @@ impl Pages {
 pub enum NavigationEvent {
     Pop,
     Push(Option<Box<dyn FlowContainer>>, Vec<usize>),
+    Restart(Option<Box<dyn FlowContainer>>),
     Reset,
     Root(String),
     Error(String),
@@ -156,6 +163,10 @@ pub enum NavigationEvent {
 impl NavigationEvent {
     pub fn push(flow: impl FlowContainer + 'static) -> Self {
         NavigationEvent::Push(Some(Box::new(flow)), vec![])
+    }
+
+    pub fn restart(flow: impl FlowContainer + 'static) -> Self {
+        NavigationEvent::Restart(Some(Box::new(flow)))
     }
 }
 

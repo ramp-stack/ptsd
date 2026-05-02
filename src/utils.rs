@@ -26,6 +26,10 @@ impl Timestamp {
     /// Create a `Timestamp` from a local [`DateTime<Local>`].
     pub fn new(dt: Option<DateTime<Local>>) -> Self {Timestamp(dt.map(|s| s.into()))}
 
+    pub fn from_i64(i: i64) -> Self {
+        Timestamp::new(Some(DateTime::<Utc>::from_timestamp(i, 0).unwrap().with_timezone(&Local)))
+    }
+
     /// Create a `Timestamp` with date and time set as pending (`"-"`).
     pub fn pending() -> (String, String) {
         ("-".to_string(), "-".to_string())
@@ -116,11 +120,11 @@ impl TitleSubtitle {
 }
 
 
-pub trait ValidationFn: FnMut(&mut Vec<Box<dyn Drawable>>) -> bool + 'static {
+pub trait ValidationFn: FnMut(&mut Context, Vec<&mut Box<dyn Drawable>>) -> bool + 'static {
     fn clone_box(&self) -> Box<dyn ValidationFn>;
 }
 
-impl<F> ValidationFn for F where F: FnMut(&mut Vec<Box<dyn Drawable>>) -> bool + Clone + 'static {
+impl<F> ValidationFn for F where F: FnMut(&mut Context, Vec<&mut Box<dyn Drawable>>) -> bool + Clone + 'static {
     fn clone_box(&self) -> Box<dyn ValidationFn> { Box::new(self.clone()) }
 }
 
