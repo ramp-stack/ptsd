@@ -119,7 +119,7 @@ clone_trait_object!(Navigator);
 
 impl Drawable for Box<dyn Navigator> {
     fn request_size(&self) -> RequestTree {Drawable::request_size(&**self)}
-    fn build(&self, size: (f32, f32), request: RequestTree) -> SizedTree {
+    fn build(&self, size: (f32, f32), request: &RequestTree) -> SizedTree {
         Drawable::build(&**self, size, request)
     }
     fn draw(&self, sized: &SizedTree, offset: (f32, f32), bound: Rect) -> Vec<(CanvasArea, CanvasItem)> {

@@ -2,11 +2,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use image::RgbaImage;
 use include_dir::{DirEntry, include_dir, Dir};
-use prism::{canvas, Assets};
+use prism::canvas;
 
 use std::fmt;
 use std::fmt::Display;
 
+use crate::utils::Assets;
 pub use crate::color::Color;
 pub use crate::colors::*;
 

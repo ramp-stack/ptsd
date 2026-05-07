@@ -1,7 +1,10 @@
 use chrono::{Datelike, Timelike};
 use prism::{Context, drawable::Drawable};
+use image::{RgbaImage, load_from_memory};
+use include_dir::{DirEntry, Dir};
 
-pub use chrono::{DateTime, Local, Utc};
+pub use chrono::{DateTime, Local, Utc, Duration};
+use std::sync::Arc;
 
 // #[derive(Clone, Copy, Deserialize, Serialize, Debug)]
 // pub struct InternetConnection(pub bool);
@@ -27,7 +30,7 @@ impl Timestamp {
     pub fn new(dt: Option<DateTime<Local>>) -> Self {Timestamp(dt.map(|s| s.into()))}
 
     pub fn from_i64(i: i64) -> Self {
-        Timestamp::new(Some(DateTime::<Utc>::from_timestamp(i, 0).unwrap().with_timezone(&Local)))
+        Timestamp::new(Some(DateTime::<Utc>::from_timestamp_millis(i).unwrap().with_timezone(&Local)))
     }
 
     /// Create a `Timestamp` with date and time set as pending (`"-"`).
@@ -84,17 +87,26 @@ impl Timestamp {
     pub fn time(&self) -> String {
         self.as_local().map(|dt| dt.format("%-I:%M %p").to_string()).unwrap_or("Pending".to_string())
     }
-    
-    pub fn date_friendly(&self) -> String {
-        if let Some(dt) = self.as_local() {
-            let today = Local::now().date_naive();
-            let date = dt.date_naive();
 
-            if date == today {return "Today".to_string();}
-            if date.iso_week() == today.iso_week() { return format!("{}", dt.format("%A")); }
-            if date.year() == today.year() { return format!("{}", dt.format("%B %-d")); }
-            format!("{}", dt.format("%m/%d/%y"))
-        } else {"Pending".to_string()}
+    pub fn precise(&self) -> String {
+        let dt = match self.0 {
+            Some(dt) => dt.with_timezone(&Local),
+            None => return "Pending".into(),
+        };
+
+        let now = Local::now().date_naive();
+        let d = dt.date_naive();
+        let t = dt.format("%-I:%M %p");
+
+        if d == now {
+            t.to_string()
+        } else if d == now - Duration::days(1) {
+            format!("Yesterday, {}", t)
+        } else if d >= now - Duration::days(7) {
+            format!("{}, {}", dt.format("%A"), t)
+        } else {
+            dt.format("%-m/%-d/%y, %-I:%M %p").to_string()
+        }
     }
 }
 
@@ -158,3 +170,49 @@ impl std::fmt::Debug for dyn Callback {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Assets {pub inner: Dir<'static>}
+
+impl Assets {
+    pub fn new(inner: Dir<'static>) -> Self { Self { inner } }
+
+    pub fn all(&self) -> &Dir<'static> {&self.inner}
+
+    pub fn get_image(&self, path: &str) -> Option<Arc<RgbaImage>> {
+        let bytes = self.inner.get_file(path)?.contents().to_vec();
+        Some(Arc::new(load_from_memory(&bytes).ok()?.to_rgba8()))
+    }
+
+    pub fn get_font(&self, path: &str) -> Option<Vec<u8>> {
+        Some(self.inner.get_file(path)?.contents().to_vec())
+    }
+
+    pub fn get_svg(&self, path: &str) -> Option<Arc<RgbaImage>> {
+        let svg = self.inner.get_file(path)?.contents().to_vec();
+        let svg = std::str::from_utf8(&svg).unwrap();
+        let svg = nsvg::parse_str(svg, nsvg::Units::Pixel, 96.0).unwrap();
+        let rgba = svg.rasterize(8.0).unwrap();
+        let size = rgba.dimensions();
+        Some(Arc::new(RgbaImage::from_raw(size.0, size.1, rgba.into_raw()).unwrap()))
+    }
+
+    pub fn load_file(&self, file: &str) -> Option<Vec<u8>> {
+        self.inner.entries().iter().find_map(|e| match e {
+            DirEntry::File(f) => (f.path().to_str().unwrap().to_lowercase() == file.to_lowercase()).then_some(f.contents().to_vec()),
+            _ => None,
+        })
+    }
+
+    pub fn load_svg(svg: &[u8]) -> RgbaImage {
+        let svg = std::str::from_utf8(svg).unwrap();
+        let svg = nsvg::parse_str(svg, nsvg::Units::Pixel, 96.0).unwrap();
+        let rgba = svg.rasterize(8.0).unwrap();
+        let size = rgba.dimensions();
+        RgbaImage::from_raw(size.0, size.1, rgba.into_raw()).unwrap()
+    }
+
+    pub fn load_png(&self, file: &str) -> Option<RgbaImage> {
+        let bytes = self.load_file(file).expect("No file");
+        Some(image::load_from_memory_with_format(&bytes, image::ImageFormat::Png).expect("No png").into_rgba8())
+    }
+}

@@ -79,13 +79,12 @@ impl History {
 pub struct Pages {
     layout: Stack,
     #[allow(clippy::type_complexity)] inner: EitherOr<Enum<Box<dyn AppPage>>, Option<Box<dyn FlowContainer>>>,
-    history: History,
+    #[skip] history: History,
 }
 
 impl OnEvent for Pages {
     fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
         if let Some(e) = event.downcast_mut::<NavigationEvent>() {
-            ctx.stop_camera();
             match e {
                 NavigationEvent::Push(flow, ..) => self.push(flow.take().unwrap()),
                 NavigationEvent::Reset => self.try_back(),
@@ -210,7 +209,7 @@ clone_trait_object!(FlowContainer);
 
 impl Drawable for Box<dyn FlowContainer> {
     fn request_size(&self) -> RequestTree {Drawable::request_size(&**self)}
-    fn build(&self, size: (f32, f32), request: RequestTree) -> SizedTree {
+    fn build(&self, size: (f32, f32), request: &RequestTree) -> SizedTree {
         Drawable::build(&**self, size, request)
     }
     fn draw(&self, sized: &SizedTree, offset: (f32, f32), bound: Rect) -> Vec<(CanvasArea, CanvasItem)> {
@@ -229,7 +228,7 @@ pub trait AppPage: Drawable + DynClone + std::fmt::Debug + 'static {}
 downcast_rs::impl_downcast!(AppPage);
 impl Drawable for Box<dyn AppPage> {
     fn request_size(&self) -> RequestTree {Drawable::request_size(&**self)}
-    fn build(&self, size: (f32, f32), request: RequestTree) -> SizedTree {
+    fn build(&self, size: (f32, f32), request: &RequestTree) -> SizedTree {
         Drawable::build(&**self, size, request)
     }
     fn draw(&self, sized: &SizedTree, offset: (f32, f32), bound: Rect) -> Vec<(CanvasArea, CanvasItem)> {
