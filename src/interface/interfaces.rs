@@ -12,9 +12,11 @@ use crate::navigation::NavigationEvent;
 pub enum Interface {
     Mobile {
         layout: Column,
+        top: Box<dyn Drawable>,
         body: Box<dyn Body>,
         keyboard: Opt<Box<dyn Drawable>>,
         navigator: Option<Opt<Box<dyn Navigator>>>,
+        bottom: Box<dyn Drawable>,
     },
 
     Desktop {
@@ -37,7 +39,10 @@ impl OnEvent for Interface {
             keyboard.display(false);
         }
         
-        if let Some(NavigationEvent::Push(_, v)) = event.downcast_mut::<NavigationEvent>() {*v = if let Interface::Desktop{navigator,..} = self && navigator.is_some() {vec![0]} else {vec![]};}
+        if let Some(NavigationEvent::Push(_, v)) = event.downcast_mut::<NavigationEvent>() {
+            *v = if let Interface::Desktop{navigator,..} = self && navigator.is_some() {vec![0]} else {vec![]};
+            *v = if let Interface::Mobile{..} = self {vec![0]} else {vec![]};
+        }
 
         if let Interface::Mobile{keyboard, ..} = self 
         && let Some(ShowKeyboard(b)) = event.downcast_ref::<ShowKeyboard>() {
@@ -62,12 +67,14 @@ impl Interface {
         }
     }
 
-    pub fn mobile(navigator: Option<Box<dyn Navigator>>, body: impl Body + 'static, keyboard: impl Drawable + 'static) -> Self {
+    pub fn mobile(padding: impl Drawable + Clone + 'static, navigator: Option<Box<dyn Navigator>>, body: impl Body + 'static, keyboard: impl Drawable + 'static) -> Self {
         Interface::Mobile {
             layout: Column::new(0.0, Offset::Center, Size::Fit, Padding::default(), None),
+            top: Box::new(padding.clone()),
             body: Box::new(body),
             keyboard: Opt::new(Box::new(keyboard), false),
             navigator: navigator.map(|n| Opt::new(n, true)),
+            bottom: Box::new(padding),
         }
     }
 

@@ -23,6 +23,11 @@ impl Selectable {
     }
 
     pub fn is_selected(&self) -> bool {self.1.1.4}
+
+    pub fn deselect(&mut self) {
+        self.1.1.1.display("default");
+        self.1.1.4 = false;
+    }
 }
 
 impl std::ops::Deref for Selectable {
