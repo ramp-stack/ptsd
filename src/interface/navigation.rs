@@ -1,5 +1,5 @@
 use prism::drawable::{Component, Drawable, SizedTree, RequestTree, Rect, DynClone, clone_trait_object};
-use prism::{Context, Request};
+use prism::{Context};
 use prism::canvas::{Area as CanvasArea, Item as CanvasItem};
 use prism::event::{OnEvent, Event};
 use prism::layout::{Area, Stack, Offset, Size, Padding};

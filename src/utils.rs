@@ -33,6 +33,10 @@ impl Timestamp {
         Timestamp::new(Some(DateTime::<Utc>::from_timestamp_millis(i).unwrap().with_timezone(&Local)))
     }
 
+    pub fn from_u64(u: u64) -> Self {
+        Timestamp::from_i64(u.try_into().unwrap_or_default())
+    }
+
     /// Create a `Timestamp` with date and time set as pending (`"-"`).
     pub fn pending() -> (String, String) {
         ("-".to_string(), "-".to_string())
