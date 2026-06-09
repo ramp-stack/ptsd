@@ -30,7 +30,7 @@ impl Timestamp {
     pub fn new(dt: Option<DateTime<Local>>) -> Self {Timestamp(dt.map(|s| s.into()))}
 
     pub fn from_i64(i: i64) -> Self {
-        Timestamp::new(Some(DateTime::<Utc>::from_timestamp_millis(i).unwrap().with_timezone(&Local)))
+        Timestamp::new(Some(DateTime::<Utc>::from_timestamp_nanos(i).with_timezone(&Local)))
     }
 
     pub fn from_u64(u: u64) -> Self {
