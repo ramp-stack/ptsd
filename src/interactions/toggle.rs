@@ -57,7 +57,7 @@ impl OnEvent for _Toggle {
             match self.2 {
                 false => self.1.display("on"),
                 true => self.1.display("off"),
-            }
+            };
         }
         Vec::new()
     }

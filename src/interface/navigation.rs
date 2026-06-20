@@ -5,6 +5,8 @@ use prism::event::{OnEvent, Event};
 use prism::layout::{Area, Stack, Offset, Size, Padding};
 use prism::display::{EitherOr, Enum};
 
+use crate::utils::Callback;
+
 // should this be a trait so that "FlowStorage" and other variables stay alive?
 #[derive(Debug, Component, Clone)]
 pub struct Flow {
@@ -56,6 +58,7 @@ impl OnEvent for Flow {
 pub struct History(Stack, Vec<Box<dyn FlowContainer>>);
 impl OnEvent for History {
     fn on_event(&mut self, _ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
+        println!("HISTORY");
         if event.downcast_ref::<NavigationEvent>().is_some() { return vec![]; }
         vec![event]
     }
@@ -88,6 +91,10 @@ impl OnEvent for Pages {
             match e {
                 NavigationEvent::Push(flow, ..) => self.push(flow.take().unwrap()),
                 NavigationEvent::Reset => self.try_back(),
+                NavigationEvent::ResetWithFunction(function) => {
+                    self.try_back();
+                    (function)(ctx);
+                },
                 NavigationEvent::Root(root) => self.root(Some(root.to_string())),
                 NavigationEvent::Restart(flow) => self.restart(flow.take().unwrap()),
                 _ => {return vec![event]}
@@ -153,6 +160,7 @@ pub enum NavigationEvent {
     Pop,
     Push(Option<Box<dyn FlowContainer>>, Vec<usize>),
     Restart(Option<Box<dyn FlowContainer>>),
+    ResetWithFunction(Box<dyn Callback>),
     Reset,
     Root(String),
     Error(String),
@@ -166,6 +174,10 @@ impl NavigationEvent {
 
     pub fn restart(flow: impl FlowContainer + 'static) -> Self {
         NavigationEvent::Restart(Some(Box::new(flow)))
+    }
+
+    pub fn reset_with_fn(callback: impl Callback + 'static) -> Self {
+        NavigationEvent::ResetWithFunction(Box::new(callback))
     }
 }
 

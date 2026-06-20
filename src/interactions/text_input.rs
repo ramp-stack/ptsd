@@ -63,7 +63,7 @@ impl _InputField {
             match self.3 {
                 true => self.1.display("error"),
                 false => self.1.display("default")
-            }
+            };
         }
     }
 }
@@ -72,7 +72,7 @@ impl OnEvent for _InputField {
     fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
         if let Some(e) = event.downcast_ref::<event::TextInput>() {
             match e {
-                event::TextInput::Hover(true) if !self.3 => self.1.display("hover"),
+                event::TextInput::Hover(true) if !self.3 => {self.1.display("hover");},
                 event::TextInput::Focused(true) => {
                     ctx.emit(ShowKeyboard(true));
                     ctx.trigger_haptic();
@@ -82,7 +82,7 @@ impl OnEvent for _InputField {
                     // ctx.trigger_event(ShowKeyboard(false));
                     self.1.display(if self.3 {"error"} else {"default"});
                 },
-                _ => self.1.display("default"),
+                _ => {self.1.display("default");},
             }
         }
         
