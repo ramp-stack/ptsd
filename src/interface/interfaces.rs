@@ -3,7 +3,7 @@ use prism::{Context, IS_MOBILE};
 use prism::event::{OnEvent, Event, TickEvent};
 use prism::layout::{Area, Column, Offset, Padding, Size, Row};
 use prism::display::Opt;
-use prism::canvas::{Area as CanvasArea, Item as CanvasItem};
+use prism::canvas::{Area as CanvasArea, Item as CanvasItem, Instruction};
 
 use crate::interface::navigation::Pages;
 use crate::navigation::NavigationEvent;
@@ -122,7 +122,7 @@ impl Drawable for Box<dyn Navigator> {
     fn build(&self, size: (f32, f32), request: &RequestTree) -> SizedTree {
         Drawable::build(&**self, size, request)
     }
-    fn draw(&self, sized: &SizedTree, offset: (f32, f32), bound: Rect) -> Vec<(CanvasArea, CanvasItem)> {
+    fn draw(&self, sized: &SizedTree, offset: (f32, f32), bound: Rect) -> Vec<Instruction> {
         Drawable::draw(&**self, sized, offset, bound)
     }
 

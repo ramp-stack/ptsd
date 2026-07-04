@@ -1,6 +1,6 @@
 use prism::drawable::{Component, Drawable, SizedTree, RequestTree, Rect, DynClone, clone_trait_object};
 use prism::{Context};
-use prism::canvas::{Area as CanvasArea, Item as CanvasItem};
+use prism::canvas::{Area as CanvasArea, Item as CanvasItem, Instruction};
 use prism::event::{OnEvent, Event};
 use prism::layout::{Area, Stack, Offset, Size, Padding};
 use prism::display::{EitherOr, Enum};
@@ -95,7 +95,7 @@ impl OnEvent for Pages {
                     self.try_back();
                     (function)(ctx);
                 },
-                NavigationEvent::Root(root) => self.root(Some(root.to_string())),
+                NavigationEvent::Root(root) => self.root(root.clone()),
                 NavigationEvent::Restart(flow) => self.restart(flow.take().unwrap()),
                 _ => {return vec![event]}
             }
@@ -162,12 +162,16 @@ pub enum NavigationEvent {
     Restart(Option<Box<dyn FlowContainer>>),
     ResetWithFunction(Box<dyn Callback>),
     Reset,
-    Root(String),
+    Root(Option<String>),
     Error(String),
     Next,
 }
 
 impl NavigationEvent {
+    pub fn root(root: &str) -> Self {
+        NavigationEvent::Root(Some(root.to_string()))
+    }
+    
     pub fn push(flow: impl FlowContainer + 'static) -> Self {
         NavigationEvent::Push(Some(Box::new(flow)), vec![])
     }
@@ -224,7 +228,7 @@ impl Drawable for Box<dyn FlowContainer> {
     fn build(&self, size: (f32, f32), request: &RequestTree) -> SizedTree {
         Drawable::build(&**self, size, request)
     }
-    fn draw(&self, sized: &SizedTree, offset: (f32, f32), bound: Rect) -> Vec<(CanvasArea, CanvasItem)> {
+    fn draw(&self, sized: &SizedTree, offset: (f32, f32), bound: Rect) -> Vec<Instruction> {
         Drawable::draw(&**self, sized, offset, bound)
     }
 
@@ -243,7 +247,7 @@ impl Drawable for Box<dyn AppPage> {
     fn build(&self, size: (f32, f32), request: &RequestTree) -> SizedTree {
         Drawable::build(&**self, size, request)
     }
-    fn draw(&self, sized: &SizedTree, offset: (f32, f32), bound: Rect) -> Vec<(CanvasArea, CanvasItem)> {
+    fn draw(&self, sized: &SizedTree, offset: (f32, f32), bound: Rect) -> Vec<Instruction> {
         Drawable::draw(&**self, sized, offset, bound)
     }
 
