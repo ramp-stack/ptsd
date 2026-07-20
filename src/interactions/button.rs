@@ -159,6 +159,7 @@ impl OnEvent for _Button {
             }
         } else if let Some(event) = event.downcast_ref::<event::Button>() {
             self.handle_button_event(ctx, *event);
+            return vec![];
         }
 
         vec![event]

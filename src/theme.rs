@@ -19,15 +19,15 @@ pub struct Theme {
 }
 
 impl Theme {
-    pub fn light(assets: &Dir<'static>, color: Color) -> Self {
+    pub fn light(assets: &Vec<Dir<'static>>, color: Color) -> Self {
         Theme { colors: ColorResources::light(color), icons: IconResources::new(assets), fonts: FontResources::default() }
     }
 
-    pub fn dark(assets: &Dir<'static>, color: Color) -> Self {
+    pub fn dark(assets: &Vec<Dir<'static>>, color: Color) -> Self {
         Theme { colors: ColorResources::dark(color), icons: IconResources::new(assets), fonts: FontResources::default() }
     }
 
-    pub fn from(assets: &Dir<'static>, color: Color) -> (Self, bool) {
+    pub fn from(assets: &Vec<Dir<'static>>, color: Color) -> (Self, bool) {
         let is_dark = color.is_high_contrast();
         (if is_dark {Self::dark(assets, color)} else {Self::light(assets, color)}, is_dark)
     }
@@ -104,9 +104,9 @@ pub struct IconResources{
     public: HashMap<String, Arc<RgbaImage>>,
 }
 impl IconResources {
-    pub fn new(assets: &Dir<'static>) -> Self {
+    pub fn new(assets: &Vec<Dir<'static>>) -> Self {
         let mut resources = IconResources::default();
-        resources.include(assets);
+        assets.iter().for_each(|a| resources.include(a));
         resources
     }
 
@@ -183,10 +183,10 @@ impl ColorResources {
         colors.insert(Background::Primary, Color::WHITE);
         colors.insert(Background::Secondary, Color::from_hex("#DDDDDD", 255));
         colors.insert(Text::Primary, Color::BLACK);
-        colors.insert(Text::Secondary, Color::from_hex("#9e9e9e", 255));
+        colors.insert(Text::Secondary, Color::from_hex("#585250", 255));
         colors.insert(Text::Heading, Color::BLACK);
-        colors.insert(Outline::Primary, Color::from_hex("#585250", 255));
-        colors.insert(Outline::Secondary, Color::from_hex("#9e9e9e", 255));
+        colors.insert(Outline::Primary, Color::from_hex("#DDDDDD", 255));
+        colors.insert(Outline::Secondary, Color::from_hex("#585250", 255));
         colors.insert(Status::Success, Color::from_hex("#3ccb5a", 255));
         colors.insert(Status::Warning, Color::from_hex("#f5bd14", 255));
         colors.insert(Status::Danger, Color::from_hex("#ff330a", 255));

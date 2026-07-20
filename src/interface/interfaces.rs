@@ -54,25 +54,28 @@ impl OnEvent for Interface {
 }
 
 impl Interface {
-    pub fn desktop(navigator: Option<Box<dyn Navigator>>, body: impl Body + 'static) -> Self {
+    pub fn desktop(ctx: &mut Context, navigator: Option<Box<dyn Navigator>>, body: impl Body + 'static) -> Self {
+        let (b, l, t, r) = ctx.get_safe_area();
         Interface::Desktop {
-            layout: Row::start(0.0), 
+            layout: Row::new(0.0, Offset::Start, Size::Fit, Padding(l, t, r, b)), 
             navigator: navigator.map(|n| Opt::new(n, true)),
             body: Box::new(body)
         }
     }
 
-    pub fn mobile(navigator: Option<Box<dyn Navigator>>, body: impl Body + 'static, keyboard: impl Drawable + 'static) -> Self {
+    pub fn mobile(ctx: &mut Context, navigator: Option<Box<dyn Navigator>>, body: impl Body + 'static, keyboard: impl Drawable + 'static) -> Self {
+        let (b, l, t, r) = ctx.get_safe_area();
         Interface::Mobile {
-            layout: Column::new(0.0, Offset::Center, Size::Fit, Padding::default(), None),
+            layout: Column::new(0.0, Offset::Center, Size::Fit, Padding(l, t, r, b), None),
             body: Box::new(body),
             keyboard: Opt::new(Box::new(keyboard), false),
             navigator: navigator.map(|n| Opt::new(n, true)),
         }
     }
 
-    pub fn web(navigator: Option<Box<dyn Navigator>>, body: impl Body + 'static) -> Self {
-        let layout = Column::new(0.0, Offset::Start, Size::Fill, Padding::default(), None);
+    pub fn web(ctx: &mut Context, navigator: Option<Box<dyn Navigator>>, body: impl Body + 'static) -> Self {
+        let (b, l, t, r) = ctx.get_safe_area();
+        let layout = Column::new(0.0, Offset::Start, Size::Fill, Padding(l, t, r, b), None);
         Interface::Web {
             layout, 
             navigator: navigator.map(|n| Opt::new(n, true)),

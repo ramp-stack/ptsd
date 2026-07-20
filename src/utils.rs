@@ -1,7 +1,7 @@
 use chrono::{Datelike, Timelike};
 use prism::{Context, drawable::Drawable};
 use image::{RgbaImage, load_from_memory};
-use include_dir::{DirEntry, Dir};
+use include_dir::{DirEntry, Dir, File};
 
 pub use chrono::{DateTime, Local, Utc, Duration};
 use std::sync::Arc;
@@ -173,38 +173,44 @@ impl std::fmt::Debug for dyn Callback {
         write!(f, "Clonable Closure")
     }
 }
-
 #[derive(Clone, Debug)]
-pub struct Assets {pub inner: Dir<'static>}
+pub struct Assets {
+    pub inner: Vec<Dir<'static>>,
+}
 
 impl Assets {
-    pub fn new(inner: Dir<'static>) -> Self { Self { inner } }
+    pub fn new(inner: Vec<Dir<'static>>) -> Self {
+        println!("Assets:");
+        for dir in &inner {
+            println!("{:?}", dir);
+        }
 
-    pub fn all(&self) -> &Dir<'static> {&self.inner}
+        Self { inner }
+    }
+
+    pub fn all(&self) -> &Vec<Dir<'static>> {
+        &self.inner
+    }
 
     pub fn get_image(&self, path: &str) -> Option<Arc<RgbaImage>> {
-        let bytes = self.inner.get_file(path)?.contents().to_vec();
+        let file = self.find_file(path)?;
+        let bytes = file.contents().to_vec();
+
         Some(Arc::new(load_from_memory(&bytes).ok()?.to_rgba8()))
     }
 
     pub fn get_font(&self, path: &str) -> Option<Vec<u8>> {
-        Some(self.inner.get_file(path)?.contents().to_vec())
+        Some(self.find_file(path)?.contents().to_vec())
     }
 
     pub fn get_svg(&self, path: &str) -> Option<Arc<RgbaImage>> {
-        let svg = self.inner.get_file(path)?.contents().to_vec();
-        let svg = std::str::from_utf8(&svg).unwrap();
-        let svg = nsvg::parse_str(svg, nsvg::Units::Pixel, 96.0).unwrap();
-        let rgba = svg.rasterize(8.0).unwrap();
-        let size = rgba.dimensions();
-        Some(Arc::new(RgbaImage::from_raw(size.0, size.1, rgba.into_raw()).unwrap()))
+        let svg = self.find_file(path)?.contents();
+
+        Some(Arc::new(Self::load_svg(svg)))
     }
 
     pub fn load_file(&self, file: &str) -> Option<Vec<u8>> {
-        self.inner.entries().iter().find_map(|e| match e {
-            DirEntry::File(f) => (f.path().to_str().unwrap().to_lowercase() == file.to_lowercase()).then_some(f.contents().to_vec()),
-            _ => None,
-        })
+        Some(self.find_file(file)?.contents().to_vec())
     }
 
     pub fn load_svg(svg: &[u8]) -> RgbaImage {
@@ -212,11 +218,82 @@ impl Assets {
         let svg = nsvg::parse_str(svg, nsvg::Units::Pixel, 96.0).unwrap();
         let rgba = svg.rasterize(8.0).unwrap();
         let size = rgba.dimensions();
+
         RgbaImage::from_raw(size.0, size.1, rgba.into_raw()).unwrap()
     }
 
     pub fn load_png(&self, file: &str) -> Option<RgbaImage> {
-        let bytes = self.load_file(file).expect("No file");
-        Some(image::load_from_memory_with_format(&bytes, image::ImageFormat::Png).expect("No png").into_rgba8())
+        let bytes = self.load_file(file)?;
+        Some(
+            image::load_from_memory_with_format(&bytes, image::ImageFormat::Png)
+                .ok()?
+                .into_rgba8()
+        )
+    }
+
+    pub fn get_asset_image(&self, name: &str) -> Option<Arc<RgbaImage>> {
+        let png = format!("{name}.png");
+        let svg = format!("{name}.svg");
+
+        if let Some(file) = self.find_file(&png) {
+
+            let image = load_from_memory(file.contents())
+                .ok()?
+                .into_rgba8();
+
+            return Some(Arc::new(image));
+        }
+
+        if let Some(file) = self.find_file(&svg) {
+
+            let image = Self::load_svg(file.contents());
+
+            return Some(Arc::new(image));
+        }
+
+        None
+    }
+
+    fn find_file(&self, name: &str) -> Option<&File<'static>> {
+        for dir in &self.inner {
+            if let Some(file) = self.find_file_recursive(dir, name) {
+                return Some(file);
+            }
+        }
+
+        None
+    }
+
+    fn find_file_recursive<'a>(
+        &self,
+        dir: &'a Dir<'static>,
+        name: &str,
+    ) -> Option<&'a File<'static>> {
+        for entry in dir.entries().iter().rev() {
+            match entry {
+                DirEntry::File(file) => {
+                    let path = file.path().to_str().unwrap_or("");
+
+                    if path.ends_with(name) {
+                        return Some(file);
+                    }
+                }
+
+                DirEntry::Dir(dir) => {
+                    if let Some(file) = self.find_file_recursive(dir, name) {
+                        return Some(file);
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    pub fn files(&self) -> Vec<&File<'static>> {
+        self.inner
+            .iter()
+            .flat_map(|dir| dir.files())
+            .collect()
     }
 }
