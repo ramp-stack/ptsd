@@ -41,16 +41,10 @@ impl OnEvent for Interface {
         }
         
         if let Some(NavigationEvent::Push(_, v)) = event.downcast_mut::<NavigationEvent>() {
-            *v = if let Interface::Desktop{navigator,..} = self && navigator.is_some() {
-                vec![0]
-            } else {
-                vec![]
-            };
-
-            *v = if let Interface::Mobile{..} = self {
-                vec![0]
-            } else {
-                vec![]
+            *v = match self {
+                Interface::Desktop{navigator,..} if navigator.is_some() => vec![0],
+                Interface::Mobile{..} => vec![0],
+                _ => vec![]
             };
         }
 
