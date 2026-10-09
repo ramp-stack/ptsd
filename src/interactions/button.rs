@@ -37,6 +37,10 @@ impl Button {
         let button = _Button::new(default, hover, pressed, disabled, feedback, callback, disableable, true);
         Self(Stack::default(), emitters::Button::new(button))
     }
+
+    pub fn set_trigger_on_release(&mut self) {
+        self.1.1.triggers_on_release = true;
+    }
 }
 
 impl std::ops::Deref for Button {
@@ -126,19 +130,22 @@ impl _Button {
                     self.is_pressed = true;
                     if !self.triggers_on_release {
                         self.callback(ctx);
-                        self.display("default");
+                        self.display("pressed");
                     }
                 }
                 event::Button::Pressed(false) => {
+                    let should_trigger = self.is_pressed && self.triggers_on_release;
+
                     self.is_pressed = false;
-                    if self.triggers_on_release {
+                    self.display("default");
+
+                    if should_trigger {
                         self.callback(ctx);
-                        self.display("default");
-                    } else {
-                        self.displays.display("default");
                     }
-                },
-                event::Button::Hover(false) if !self.is_pressed => {
+                }
+
+                event::Button::Hover(false) => {
+                    self.is_pressed = false;
                     self.displays.display("default");
                 }
                 // event::Button::Disable(_) => {},
@@ -151,11 +158,11 @@ impl _Button {
 impl OnEvent for _Button {
     fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
         if event.downcast_ref::<TickEvent>().is_some() {
-            if let Some((timer, display)) = &self.active_label {
-                if timer.elapsed() >= Duration::from_millis(1000) {
-                    self.active_label = None;
-                    self.handle_button_event(ctx, event::Button::Pressed(false));
-                }
+            if let Some((timer, _)) = &self.active_label
+                && timer.elapsed() >= Duration::from_millis(1000) {
+                self.active_label = None;
+                self.is_pressed = false;
+                self.displays.display(if self.disabled {"disabled"} else {"default"});
             }
         } else if let Some(event) = event.downcast_ref::<event::Button>() {
             self.handle_button_event(ctx, *event);
@@ -165,7 +172,6 @@ impl OnEvent for _Button {
         vec![event]
     }
 }
-
 impl std::fmt::Debug for _Button {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "_Button")

@@ -1,10 +1,11 @@
 use prism::drawable::{Component, Drawable, SizedTree, RequestTree, Rect, DynClone, clone_trait_object};
 use prism::{Context, IS_MOBILE};
 use prism::event::{OnEvent, Event, TickEvent};
-use prism::layout::{Area, Column, Offset, Padding, Size, Row};
-use prism::display::Opt;
-use prism::canvas::{Area as CanvasArea, Item as CanvasItem, Instruction};
+use prism::layout::{Area, Column, Offset, Padding, Size, Row, Stack, SizeRequest};
+use prism::display::{Opt, Bin};
+use prism::canvas::{Area as CanvasArea, Item as CanvasItem, Instruction, ShapeType, Shape};
 
+use crate::Color;
 use crate::interface::navigation::Pages;
 use crate::navigation::NavigationEvent;
 
@@ -12,9 +13,11 @@ use crate::navigation::NavigationEvent;
 pub enum Interface {
     Mobile {
         layout: Column,
+        safe_area_top: Bin<Stack, Rectangle>,
         body: Box<dyn Body>,
-        keyboard: Opt<Box<dyn Drawable>>,
         navigator: Option<Opt<Box<dyn Navigator>>>,
+        safe_area_bottom: Option<Bin<Stack, Rectangle>>,
+        keyboard: Opt<Box<dyn Drawable>>,
     },
 
     Desktop {
@@ -32,21 +35,39 @@ pub enum Interface {
 
 
 impl OnEvent for Interface {
-    fn on_event(&mut self, _ctx: &mut Context, _sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
+    fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
         if event.downcast_mut::<NavigationEvent>().is_some() && let Interface::Mobile{keyboard, ..} = self {
             keyboard.display(false);
         }
         
-        if let Some(NavigationEvent::Push(_, v)) = event.downcast_mut::<NavigationEvent>() {*v = if let Interface::Desktop{navigator,..} = self && navigator.is_some() {vec![0]} else {vec![]};}
+        if let Some(NavigationEvent::Push(_, v)) = event.downcast_mut::<NavigationEvent>() {
+            *v = match self {
+                Interface::Desktop{navigator,..} if navigator.is_some() => vec![0],
+                Interface::Mobile{..} => vec![0],
+                _ => vec![]
+            };
+        }
 
         if let Interface::Mobile{keyboard, ..} = self 
         && let Some(ShowKeyboard(b)) = event.downcast_ref::<ShowKeyboard>() {
             keyboard.display(*b);
         }
 
-        if IS_MOBILE && event.downcast_ref::<TickEvent>().is_some() {
-            let is_root = self.pages().is_root();
-            if let Some(s) = self.navigator().as_mut() { s.display(is_root) }
+        if IS_MOBILE && let Interface::Mobile{keyboard, body, navigator, safe_area_bottom, ..} = self && event.downcast_ref::<TickEvent>().is_some() {
+            let is_root = body.pages().is_root();
+            if let Some(s) = navigator.as_mut() { 
+                if keyboard.is_showing() {
+                    s.display(false);
+                    *safe_area_bottom = None;
+                } else {
+                    s.display(is_root);
+
+                    let (b, _, _, _) = ctx.get_safe_area();
+                    let sab = Rectangle::new(Color::BLACK);
+                    let sabl = Stack(Offset::Center, Offset::Center, Size::Fill, Size::Static(b), Padding::default());
+                    *safe_area_bottom = Some(Bin(sabl, sab));
+                }
+            }
         }
 
         vec![event]
@@ -65,11 +86,17 @@ impl Interface {
 
     pub fn mobile(ctx: &mut Context, navigator: Option<Box<dyn Navigator>>, body: impl Body + 'static, keyboard: impl Drawable + 'static) -> Self {
         let (b, l, t, r) = ctx.get_safe_area();
+        let safe_area_top = Rectangle::new(Color::BLACK);
+        let safe_area_top_layout = Stack(Offset::Center, Offset::Center, Size::Fill, Size::Static(t), Padding::default());
+        let safe_area_bottom = Rectangle::new(Color::BLACK);
+        let safe_area_bottom_layout = Stack(Offset::Center, Offset::Center, Size::Fill, Size::Static(b), Padding::default());
         Interface::Mobile {
-            layout: Column::new(0.0, Offset::Center, Size::Fit, Padding(l, t, r, b), None),
+            layout: Column::new(0.0, Offset::Center, Size::Fit, Padding::default(), None),
+            safe_area_top: Bin(safe_area_top_layout, safe_area_top),
             body: Box::new(body),
             keyboard: Opt::new(Box::new(keyboard), false),
             navigator: navigator.map(|n| Opt::new(n, true)),
+            safe_area_bottom: Some(Bin(safe_area_bottom_layout, safe_area_bottom)),
         }
     }
 
@@ -136,4 +163,27 @@ impl Drawable for Box<dyn Navigator> {
     }
 }
 
+#[derive(Debug, Clone)]
+struct Rectangle(Shape);
 
+impl Rectangle {
+    fn new(color: Color) -> Self {
+        Rectangle(Shape{shape: ShapeType::Rectangle(0.0, (0.0, 0.0), 0.0), color: color.into()})
+    }
+
+    fn shape(&mut self) -> &mut Shape { &mut self.0 }
+}
+
+impl Drawable for Rectangle {
+    fn request_size(&self) -> RequestTree {RequestTree(SizeRequest::fill(), vec![])}
+
+    fn draw(&self, sized: &SizedTree, offset: (f32, f32), bound: Rect) -> Vec<Instruction> {
+        let shape = match self.0.shape {
+            ShapeType::RoundedRectangle(s, _, a, r) => ShapeType::RoundedRectangle(s, sized.0, a, r),
+            ShapeType::Rectangle(s, _, a) => ShapeType::Rectangle(s, sized.0, a),
+            ShapeType::Ellipse(s, _, a) => ShapeType::Ellipse(s, sized.0, a),
+        };
+
+        vec![Instruction(CanvasArea{offset, bounds: Some(bound)}, CanvasItem::Shape(Shape{shape, color: self.0.color}))]
+    }
+}

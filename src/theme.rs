@@ -201,7 +201,7 @@ impl ColorResources {
         colors.insert(Text::Primary, Color::WHITE);
         colors.insert(Text::Secondary, Color::from_hex("#a7a29d", 255));
         colors.insert(Text::Heading, Color::WHITE);
-        colors.insert(Outline::Primary, Color::from_hex("#585250", 255));
+        colors.insert(Outline::Primary, Color::WHITE);
         colors.insert(Outline::Secondary, Color::from_hex("#a7a29d", 255));
         colors.insert(Status::Success, Color::from_hex("#3ccb5a", 255));
         colors.insert(Status::Warning, Color::from_hex("#f5bd14", 255));
