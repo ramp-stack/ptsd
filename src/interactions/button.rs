@@ -126,16 +126,17 @@ impl _Button {
                     self.is_pressed = true;
                     if !self.triggers_on_release {
                         self.callback(ctx);
-                        self.display("default");
+                        self.display("pressed");
                     }
                 }
                 event::Button::Pressed(false) => {
                     self.is_pressed = false;
+                    self.display("default");
                     if self.triggers_on_release {
                         self.callback(ctx);
-                        self.display("default");
+                        // self.display("default");
                     } else {
-                        self.displays.display("default");
+                        // self.displays.display("default");
                     }
                 },
                 event::Button::Hover(false) if !self.is_pressed => {
