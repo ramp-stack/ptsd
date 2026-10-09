@@ -158,11 +158,11 @@ impl _Button {
 impl OnEvent for _Button {
     fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
         if event.downcast_ref::<TickEvent>().is_some() {
-            if let Some((timer, display)) = &self.active_label {
-                if timer.elapsed() >= Duration::from_millis(1000) {
-                    self.active_label = None;
-                    self.handle_button_event(ctx, event::Button::Pressed(false));
-                }
+            if let Some((timer, _)) = &self.active_label
+                && timer.elapsed() >= Duration::from_millis(1000) {
+                self.active_label = None;
+                self.is_pressed = false;
+                self.displays.display(if self.disabled {"disabled"} else {"default"});
             }
         } else if let Some(event) = event.downcast_ref::<event::Button>() {
             self.handle_button_event(ctx, *event);
@@ -172,7 +172,6 @@ impl OnEvent for _Button {
         vec![event]
     }
 }
-
 impl std::fmt::Debug for _Button {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "_Button")
