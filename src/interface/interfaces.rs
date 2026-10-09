@@ -15,9 +15,9 @@ pub enum Interface {
         layout: Column,
         safe_area_top: Bin<Stack, Rectangle>,
         body: Box<dyn Body>,
-        keyboard: Opt<Box<dyn Drawable>>,
         navigator: Option<Opt<Box<dyn Navigator>>>,
-        safe_area_bottom: Bin<Stack, Rectangle>,
+        safe_area_bottom: Option<Bin<Stack, Rectangle>>,
+        keyboard: Opt<Box<dyn Drawable>>,
     },
 
     Desktop {
@@ -35,7 +35,7 @@ pub enum Interface {
 
 
 impl OnEvent for Interface {
-    fn on_event(&mut self, _ctx: &mut Context, _sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
+    fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
         if event.downcast_mut::<NavigationEvent>().is_some() && let Interface::Mobile{keyboard, ..} = self {
             keyboard.display(false);
         }
@@ -53,13 +53,19 @@ impl OnEvent for Interface {
             keyboard.display(*b);
         }
 
-        if IS_MOBILE && let Interface::Mobile{keyboard, body, navigator, ..} = self && event.downcast_ref::<TickEvent>().is_some() {
+        if IS_MOBILE && let Interface::Mobile{keyboard, body, navigator, safe_area_bottom, ..} = self && event.downcast_ref::<TickEvent>().is_some() {
             let is_root = body.pages().is_root();
             if let Some(s) = navigator.as_mut() { 
                 if keyboard.is_showing() {
                     s.display(false);
+                    *safe_area_bottom = None;
                 } else {
                     s.display(is_root);
+
+                    let (b, _, _, _) = ctx.get_safe_area();
+                    let sab = Rectangle::new(Color::BLACK);
+                    let sabl = Stack(Offset::Center, Offset::Center, Size::Fill, Size::Static(b), Padding::default());
+                    *safe_area_bottom = Some(Bin(sabl, sab));
                 }
             }
         }
@@ -90,7 +96,7 @@ impl Interface {
             body: Box::new(body),
             keyboard: Opt::new(Box::new(keyboard), false),
             navigator: navigator.map(|n| Opt::new(n, true)),
-            safe_area_bottom: Bin(safe_area_bottom_layout, safe_area_bottom),
+            safe_area_bottom: Some(Bin(safe_area_bottom_layout, safe_area_bottom)),
         }
     }
 
