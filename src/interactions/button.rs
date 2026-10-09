@@ -37,6 +37,10 @@ impl Button {
         let button = _Button::new(default, hover, pressed, disabled, feedback, callback, disableable, true);
         Self(Stack::default(), emitters::Button::new(button))
     }
+
+    pub fn set_trigger_on_release(&mut self) {
+        self.1.1.triggers_on_release = true;
+    }
 }
 
 impl std::ops::Deref for Button {
@@ -130,16 +134,18 @@ impl _Button {
                     }
                 }
                 event::Button::Pressed(false) => {
+                    let should_trigger = self.is_pressed && self.triggers_on_release;
+
                     self.is_pressed = false;
                     self.display("default");
-                    if self.triggers_on_release {
+
+                    if should_trigger {
                         self.callback(ctx);
-                        // self.display("default");
-                    } else {
-                        // self.displays.display("default");
                     }
-                },
-                event::Button::Hover(false) if !self.is_pressed => {
+                }
+
+                event::Button::Hover(false) => {
+                    self.is_pressed = false;
                     self.displays.display("default");
                 }
                 // event::Button::Disable(_) => {},
