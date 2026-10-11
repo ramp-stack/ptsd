@@ -16,7 +16,7 @@ pub enum Interface {
         safe_area_top: Bin<Stack, Rectangle>,
         body: Box<dyn Body>,
         navigator: Option<Opt<Box<dyn Navigator>>>,
-        safe_area_bottom: Option<Bin<Stack, Rectangle>>,
+        safe_area_bottom: Opt<Bin<Stack, Rectangle>>,
         keyboard: Opt<Box<dyn Drawable>>,
     },
 
@@ -58,14 +58,10 @@ impl OnEvent for Interface {
             if let Some(s) = navigator.as_mut() { 
                 if keyboard.is_showing() {
                     s.display(false);
-                    *safe_area_bottom = None;
+                    safe_area_bottom.display(false);
                 } else {
                     s.display(is_root);
-
-                    let (b, _, _, _) = ctx.get_safe_area();
-                    let sab = Rectangle::new(Color::BLACK);
-                    let sabl = Stack(Offset::Center, Offset::Center, Size::Fill, Size::Static(b), Padding::default());
-                    *safe_area_bottom = Some(Bin(sabl, sab));
+                    safe_area_bottom.display(true);
                 }
             }
         }
@@ -96,7 +92,7 @@ impl Interface {
             body: Box::new(body),
             keyboard: Opt::new(Box::new(keyboard), false),
             navigator: navigator.map(|n| Opt::new(n, true)),
-            safe_area_bottom: Some(Bin(safe_area_bottom_layout, safe_area_bottom)),
+            safe_area_bottom: Opt::new(Bin(safe_area_bottom_layout, safe_area_bottom), true), //Some(Bin(safe_area_bottom_layout, safe_area_bottom)),
         }
     }
 
