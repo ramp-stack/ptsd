@@ -1,4 +1,4 @@
-use prism::event::{self, OnEvent, Event, TickEvent};
+use prism::event::{self, OnEvent, Event, TickEvent, MouseEvent, MouseState, MouseButton};
 use prism::drawable::{Drawable, Component, SizedTree};
 use prism::display::Enum;
 use prism::layout::Stack;
@@ -8,9 +8,38 @@ use std::time::{Instant, Duration};
 
 use crate::utils::Callback;
 
+/// The last field is the position of a release that reached this button in
+/// the current frame while it wasn't pressed (`None` if there wasn't one).
 #[derive(Component, Debug, Clone)]
-pub struct Button(Stack, emitters::Button<_Button>);
-impl OnEvent for Button {}
+pub struct Button(Stack, emitters::Button<_Button>, #[skip] Option<Option<(f32, f32)>>);
+
+impl OnEvent for Button {
+    fn on_event(&mut self, _ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
+        // prism hands a frame's input events over newest first, so a quick tap
+        // whose press and release land in the same frame arrives as release,
+        // then press. Unhandled, the button takes the press and never sees its
+        // release, and stays pressed. So when a press follows a release in the
+        // same frame, replay that release right after it.
+        if event.downcast_ref::<TickEvent>().is_some() {
+            self.2 = None;
+        } else if let Some(mouse) = event.downcast_ref::<MouseEvent>() {
+            match mouse.state {
+                MouseState::Released(MouseButton::Left) if !self.1.1.is_pressed => {
+                    self.2 = Some(mouse.position);
+                }
+                MouseState::Pressed(MouseButton::Left) if mouse.position.is_some() => {
+                    if let Some(position) = self.2.take() {
+                        let release = MouseEvent { position, state: MouseState::Released(MouseButton::Left) };
+                        return vec![event, Box::new(release)];
+                    }
+                }
+                _ => {}
+            }
+        }
+        vec![event]
+    }
+}
+
 impl Button {
     pub fn new(
         default: impl Drawable + 'static,
@@ -22,7 +51,7 @@ impl Button {
         disableable: bool,
     ) -> Self {
         let button = _Button::new(default, hover, pressed, disabled, feedback, callback, disableable, false);
-        Self(Stack::default(), emitters::Button::new(button))
+        Self(Stack::default(), emitters::Button::new(button), None)
     }
 
     pub fn new_triggers_on_release(
@@ -35,7 +64,7 @@ impl Button {
         disableable: bool,
     ) -> Self {
         let button = _Button::new(default, hover, pressed, disabled, feedback, callback, disableable, true);
-        Self(Stack::default(), emitters::Button::new(button))
+        Self(Stack::default(), emitters::Button::new(button), None)
     }
 
     pub fn set_trigger_on_release(&mut self) {
@@ -177,4 +206,3 @@ impl std::fmt::Debug for _Button {
         write!(f, "_Button")
     }
 }
-
