@@ -8,18 +8,11 @@ use std::time::{Instant, Duration};
 
 use crate::utils::Callback;
 
-/// The last field is the position of a release that reached this button in
-/// the current frame while it wasn't pressed (`None` if there wasn't one).
 #[derive(Component, Debug, Clone)]
 pub struct Button(Stack, emitters::Button<_Button>, #[skip] Option<Option<(f32, f32)>>);
 
 impl OnEvent for Button {
     fn on_event(&mut self, _ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
-        // prism hands a frame's input events over newest first, so a quick tap
-        // whose press and release land in the same frame arrives as release,
-        // then press. Unhandled, the button takes the press and never sees its
-        // release, and stays pressed. So when a press follows a release in the
-        // same frame, replay that release right after it.
         if event.downcast_ref::<TickEvent>().is_some() {
             self.2 = None;
         } else if let Some(mouse) = event.downcast_ref::<MouseEvent>() {
