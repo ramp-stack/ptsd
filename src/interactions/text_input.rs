@@ -21,6 +21,7 @@ impl InputField {
         let text_input = _InputField::new(default, focus, hover, error, content, height);
         Self(Stack::default(), emitters::TextInput::new(text_input, true))
     }
+    pub fn is_focused(&self) -> bool {self.1.1.1.1.current() == "focus"}
 }
 
 impl std::ops::Deref for InputField {

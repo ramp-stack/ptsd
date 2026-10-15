@@ -1,4 +1,4 @@
-use prism::event::{self, OnEvent, Event, TickEvent};
+use prism::event::{self, OnEvent, Event, TickEvent, MouseEvent, MouseState, MouseButton};
 use prism::drawable::{Drawable, Component, SizedTree};
 use prism::display::Enum;
 use prism::layout::Stack;
@@ -9,8 +9,30 @@ use std::time::{Instant, Duration};
 use crate::utils::Callback;
 
 #[derive(Component, Debug, Clone)]
-pub struct Button(Stack, emitters::Button<_Button>);
-impl OnEvent for Button {}
+pub struct Button(Stack, emitters::Button<_Button>, #[skip] Option<Option<(f32, f32)>>);
+
+impl OnEvent for Button {
+    fn on_event(&mut self, _ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
+        if event.downcast_ref::<TickEvent>().is_some() {
+            self.2 = None;
+        } else if let Some(mouse) = event.downcast_ref::<MouseEvent>() {
+            match mouse.state {
+                MouseState::Released(MouseButton::Left) if !self.1.1.is_pressed => {
+                    self.2 = Some(mouse.position);
+                }
+                MouseState::Pressed(MouseButton::Left) if mouse.position.is_some() => {
+                    if let Some(position) = self.2.take() {
+                        let release = MouseEvent { position, state: MouseState::Released(MouseButton::Left) };
+                        return vec![event, Box::new(release)];
+                    }
+                }
+                _ => {}
+            }
+        }
+        vec![event]
+    }
+}
+
 impl Button {
     pub fn new(
         default: impl Drawable + 'static,
@@ -22,7 +44,7 @@ impl Button {
         disableable: bool,
     ) -> Self {
         let button = _Button::new(default, hover, pressed, disabled, feedback, callback, disableable, false);
-        Self(Stack::default(), emitters::Button::new(button))
+        Self(Stack::default(), emitters::Button::new(button), None)
     }
 
     pub fn new_triggers_on_release(
@@ -35,7 +57,11 @@ impl Button {
         disableable: bool,
     ) -> Self {
         let button = _Button::new(default, hover, pressed, disabled, feedback, callback, disableable, true);
-        Self(Stack::default(), emitters::Button::new(button))
+        Self(Stack::default(), emitters::Button::new(button), None)
+    }
+
+    pub fn set_trigger_on_release(&mut self) {
+        self.1.1.triggers_on_release = true;
     }
 }
 
@@ -61,6 +87,7 @@ pub struct _Button {
 }
 
 impl _Button {
+    #[allow(clippy::too_many_arguments)] // by one
     pub fn new(
         default: impl Drawable + 'static,
         hover: Option<impl Drawable + 'static>,
@@ -126,19 +153,22 @@ impl _Button {
                     self.is_pressed = true;
                     if !self.triggers_on_release {
                         self.callback(ctx);
-                        self.display("default");
+                        self.display("pressed");
                     }
                 }
                 event::Button::Pressed(false) => {
+                    let should_trigger = self.is_pressed && self.triggers_on_release;
+
                     self.is_pressed = false;
-                    if self.triggers_on_release {
+                    self.display("default");
+
+                    if should_trigger {
                         self.callback(ctx);
-                        self.display("default");
-                    } else {
-                        self.displays.display("default");
                     }
-                },
-                event::Button::Hover(false) if !self.is_pressed => {
+                }
+
+                event::Button::Hover(false) => {
+                    self.is_pressed = false;
                     self.displays.display("default");
                 }
                 // event::Button::Disable(_) => {},
@@ -151,11 +181,11 @@ impl _Button {
 impl OnEvent for _Button {
     fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
         if event.downcast_ref::<TickEvent>().is_some() {
-            if let Some((timer, display)) = &self.active_label {
-                if timer.elapsed() >= Duration::from_millis(1000) {
-                    self.active_label = None;
-                    self.handle_button_event(ctx, event::Button::Pressed(false));
-                }
+            if let Some((timer, _)) = &self.active_label
+                && timer.elapsed() >= Duration::from_millis(1000) {
+                self.active_label = None;
+                self.is_pressed = false;
+                self.displays.display(if self.disabled {"disabled"} else {"default"});
             }
         } else if let Some(event) = event.downcast_ref::<event::Button>() {
             self.handle_button_event(ctx, *event);
@@ -165,10 +195,8 @@ impl OnEvent for _Button {
         vec![event]
     }
 }
-
 impl std::fmt::Debug for _Button {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "_Button")
     }
 }
-

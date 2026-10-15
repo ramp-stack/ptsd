@@ -1,13 +1,12 @@
 use prism::drawable::{Component, Drawable, SizedTree, RequestTree, Rect, DynClone, clone_trait_object};
 use prism::{Context};
-use prism::canvas::{Area as CanvasArea, Item as CanvasItem, Instruction};
+use prism::canvas::Instruction;
 use prism::event::{OnEvent, Event};
 use prism::layout::{Area, Stack, Offset, Size, Padding};
 use prism::display::{EitherOr, Enum};
 
 use crate::utils::Callback;
 
-// should this be a trait so that "FlowStorage" and other variables stay alive?
 #[derive(Debug, Component, Clone)]
 pub struct Flow {
     layout: Stack,
