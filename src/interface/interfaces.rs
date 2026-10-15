@@ -1,8 +1,10 @@
+#![allow(clippy::large_enum_variant)]
+
 use prism::drawable::{Component, Drawable, SizedTree, RequestTree, Rect, DynClone, clone_trait_object};
 use prism::{Context, IS_MOBILE};
 use prism::event::{OnEvent, Event, TickEvent};
 use prism::layout::{Area, Column, Offset, Padding, Size, Row, Stack, SizeRequest};
-use prism::display::{Opt, Bin};
+use prism::display::Opt;
 use prism::canvas::{Area as CanvasArea, Item as CanvasItem, Instruction, ShapeType, Shape};
 
 use crate::Color;
@@ -13,10 +15,10 @@ use crate::navigation::NavigationEvent;
 pub enum Interface {
     Mobile {
         layout: Column,
-        safe_area_top: Bin<Stack, Rectangle>,
+        safe_area_top: SafeArea,
         body: Box<dyn Body>,
         navigator: Option<Opt<Box<dyn Navigator>>>,
-        safe_area_bottom: Opt<Bin<Stack, Rectangle>>,
+        safe_area_bottom: Opt<SafeArea>,
         keyboard: Opt<Box<dyn Drawable>>,
     },
 
@@ -35,7 +37,7 @@ pub enum Interface {
 
 
 impl OnEvent for Interface {
-    fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
+    fn on_event(&mut self, _ctx: &mut Context, _sized: &SizedTree, mut event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
         if event.downcast_mut::<NavigationEvent>().is_some() && let Interface::Mobile{keyboard, ..} = self {
             keyboard.display(false);
         }
@@ -81,18 +83,14 @@ impl Interface {
     }
 
     pub fn mobile(ctx: &mut Context, navigator: Option<Box<dyn Navigator>>, body: impl Body + 'static, keyboard: impl Drawable + 'static) -> Self {
-        let (b, l, t, r) = ctx.get_safe_area();
-        let safe_area_top = Rectangle::new(Color::BLACK);
-        let safe_area_top_layout = Stack(Offset::Center, Offset::Center, Size::Fill, Size::Static(t), Padding::default());
-        let safe_area_bottom = Rectangle::new(Color::BLACK);
-        let safe_area_bottom_layout = Stack(Offset::Center, Offset::Center, Size::Fill, Size::Static(b), Padding::default());
+        let (b, _, t, _) = ctx.get_safe_area();
         Interface::Mobile {
             layout: Column::new(0.0, Offset::Center, Size::Fit, Padding::default(), None),
-            safe_area_top: Bin(safe_area_top_layout, safe_area_top),
+            safe_area_top: SafeArea::new(t, Color::BLACK),
             body: Box::new(body),
             keyboard: Opt::new(Box::new(keyboard), false),
             navigator: navigator.map(|n| Opt::new(n, true)),
-            safe_area_bottom: Opt::new(Bin(safe_area_bottom_layout, safe_area_bottom), true), //Some(Bin(safe_area_bottom_layout, safe_area_bottom)),
+            safe_area_bottom: Opt::new(SafeArea::new(b, Color::BLACK), true), //Some(Bin(safe_area_bottom_layout, safe_area_bottom)),
         }
     }
 
@@ -159,16 +157,19 @@ impl Drawable for Box<dyn Navigator> {
     }
 }
 
+#[derive(Component, Debug, Clone)]
+pub struct SafeArea(Stack, Rectangle);
+impl OnEvent for SafeArea {}
+
+impl SafeArea {
+    fn new(height: f32, color: Color) -> Self {
+        let layout = Stack(Offset::Center, Offset::Center, Size::Fill, Size::Static(height), Padding::default());
+        SafeArea(layout, Rectangle(Shape{shape: ShapeType::Rectangle(0.0, (0.0, 0.0), 0.0), color: color.into()}))
+    }
+}
+
 #[derive(Debug, Clone)]
 struct Rectangle(Shape);
-
-impl Rectangle {
-    fn new(color: Color) -> Self {
-        Rectangle(Shape{shape: ShapeType::Rectangle(0.0, (0.0, 0.0), 0.0), color: color.into()})
-    }
-
-    fn shape(&mut self) -> &mut Shape { &mut self.0 }
-}
 
 impl Drawable for Rectangle {
     fn request_size(&self) -> RequestTree {RequestTree(SizeRequest::fill(), vec![])}

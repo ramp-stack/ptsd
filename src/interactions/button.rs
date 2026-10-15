@@ -87,6 +87,7 @@ pub struct _Button {
 }
 
 impl _Button {
+    #[allow(clippy::too_many_arguments)] // by one
     pub fn new(
         default: impl Drawable + 'static,
         hover: Option<impl Drawable + 'static>,

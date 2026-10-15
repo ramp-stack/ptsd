@@ -70,7 +70,7 @@ impl _InputField {
 }
 
 impl OnEvent for _InputField {
-    fn on_event(&mut self, ctx: &mut Context, sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
+    fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
         if let Some(e) = event.downcast_ref::<event::TextInput>() {
             match e {
                 event::TextInput::Hover(true) if !self.3 => {self.1.display("hover");},
