@@ -4,7 +4,7 @@ PTSD is a Rust crate that provides a foundational layer between **Prism** and hi
 
 Rather than acting as a UI framework itself, PTSD supplies common infrastructure that design systems can build upon. This separation allows UI frameworks to remain focused on presentation while delegating behavioral and structural concerns to PTSD.
 
-PTSD is commonly used as the layer directly beneath a design system such as **Pelican UI**, and directly above **Prism**, which provides rendering, layout, and event systems.
+PTSD sits beneath design systems such as **Pelican UI** and above **Prism**. Prism provides drawable and layout traits, drawing instructions, input events, and application interfaces. PTSD supplies the concrete UI layouts, containers, and interactions. Prism is PTSD's only RAMP-stack dependency.
 
 Together these layers form the following structure:
 
@@ -16,8 +16,6 @@ Design System (e.g. Pelican UI)
 PTSD
     ↓
 Prism
-    ↓
-wgpu
 ```
 
 ## Scope
@@ -27,12 +25,21 @@ PTSD provides:
 * Navigation infrastructure
 * Interaction systems
 * Theme resource management
+* Layouts: `Stack`, `Row`, `Column`, and `Wrap`
+* Display containers: `Bin`, `Opt`, `EitherOr`, and `Enum`
+* Input emitters and UI events
 
-PTSD intentionally **does not provide UI components or layouts**. Those responsibilities belong to higher-level design systems such as Pelican UI.
+Styled components remain in higher-level design systems such as Pelican UI.
+
+The former Prism helpers now live in `ptsd::layout`, `ptsd::display`, `ptsd::emitters`, and `ptsd::events`. Drawable implementations use Prism's `SizeRange`, `RangeTree`, and `LayoutTree`. Concrete component handlers use `prism::events::OnEvent<E>` with `#[on_event]` above each implementation.
+
+Components use `#[derive(Component)]`. Generic emitters use `#[on_dyn_event]` and define an inherent `on_event` method to receive boxed events directly. `Opt` transfers its child between a visible `Option<D>` and a `#[skip]` hidden `Option<D>`, retaining its state while hidden.
+
+Prism applies window insets before laying out the root component. PTSD interfaces do not add those insets again, and their constructors no longer require a `Context`.
 
 ## Interactions
 
-PTSD defines a set of reusable interaction types that sit between Prism’s event emitters and the drawable components that respond to them.
+PTSD defines reusable emitters that translate Prism input events into UI events, and interaction types that update the drawable components in response.
 
 These interaction layers translate raw input events into meaningful UI behaviors.
 

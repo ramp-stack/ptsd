@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use image::RgbaImage;
 use include_dir::{DirEntry, include_dir, Dir};
-use prism::canvas;
+use prism::drawable::text::Font;
 
 use std::fmt;
 use std::fmt::Display;
@@ -36,11 +36,11 @@ impl Theme {
 #[derive(Debug, Clone)]
 pub struct FontResources {
     sizes: HashMap<String, f32>,
-    fonts: HashMap<String, canvas::Font>,
+    fonts: HashMap<String, Font>,
 }
 
 impl FontResources {
-    pub fn insert_font<K: Display>(&mut self, key: K, font: canvas::Font) {
+    pub fn insert_font<K: Display>(&mut self, key: K, font: Font) {
         self.fonts.insert(key.to_string(), font);
     }
 
@@ -48,7 +48,7 @@ impl FontResources {
         self.sizes.insert(key.to_string(), size);
     }
 
-    pub fn get_font<K: Display>(&self, key: K) -> Option<&canvas::Font> {
+    pub fn get_font<K: Display>(&self, key: K) -> Option<&Font> {
         self.fonts.get(&key.to_string())
     }
 
@@ -59,8 +59,8 @@ impl FontResources {
 
 impl Default for FontResources {
     fn default() -> Self {
-        let bold = canvas::Font::from_bytes(include_bytes!("../resources/fonts/outfit_bold.ttf")).unwrap();
-        let regular = canvas::Font::from_bytes(include_bytes!("../resources/fonts/outfit_regular.ttf")).unwrap();
+        let bold = Font::from_bytes(include_bytes!("../resources/fonts/outfit_bold.ttf")).unwrap();
+        let regular = Font::from_bytes(include_bytes!("../resources/fonts/outfit_regular.ttf")).unwrap();
         let mut resources = FontResources {fonts: HashMap::new(), sizes: HashMap::new()};
         resources.insert_font(FontStyle::Heading, bold.clone());
         resources.insert_font(FontStyle::Text, regular);
@@ -201,7 +201,7 @@ impl ColorResources {
         colors.insert(Text::Primary, Color::WHITE);
         colors.insert(Text::Secondary, Color::from_hex("#a7a29d", 255));
         colors.insert(Text::Heading, Color::WHITE);
-        colors.insert(Outline::Primary, Color::from_hex("#585250", 255));
+        colors.insert(Outline::Primary, Color::WHITE);
         colors.insert(Outline::Secondary, Color::from_hex("#a7a29d", 255));
         colors.insert(Status::Success, Color::from_hex("#3ccb5a", 255));
         colors.insert(Status::Warning, Color::from_hex("#f5bd14", 255));
