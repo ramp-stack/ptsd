@@ -1,6 +1,5 @@
 use dyn_clone::DynClone;
 use prism::Context;
-use prism::events::ChangeSource;
 
 use std::ops::Deref;
 use std::future::Future;
@@ -8,18 +7,18 @@ use std::pin::Pin;
 use std::rc::Rc;
 
 /// The dependency supplied to a watched validator. Source methods are available through `Deref`.
-pub struct Watched<S: ChangeSource> {
+pub struct Watched<S, U> {
     source: S,
-    latest: Option<Rc<S::Update>>,
+    latest: Option<Rc<U>>,
 }
-impl<S: ChangeSource> Watched<S> {
-    /// The last delivered update, retained across input edits and source completion.
-    pub fn latest(&self) -> Option<&S::Update> {self.latest.as_deref()}
+impl<S, U> Watched<S, U> {
+    /// The last delivered update, retained across input edits and subsequent waits.
+    pub fn latest(&self) -> Option<&U> {self.latest.as_deref()}
 }
-impl<S: ChangeSource + Clone> Clone for Watched<S> {
+impl<S: Clone, U> Clone for Watched<S, U> {
     fn clone(&self) -> Self {Self {source: self.source.clone(), latest: self.latest.clone()}}
 }
-impl<S: ChangeSource> Deref for Watched<S> {
+impl<S, U> Deref for Watched<S, U> {
     type Target = S;
     fn deref(&self) -> &S {&self.source}
 }
@@ -32,27 +31,35 @@ pub trait Validate<I, O>: DynClone + 'static {
 impl<I, O, F: FnMut(&mut Context, I) -> O + Clone + 'static> Validate<I, O> for F {
     fn validate(&mut self, ctx: &mut Context, input: I) -> O {self(ctx, input)}
 }
-impl<I, O, S: ChangeSource + Clone, F: FnMut(&mut Context, &Watched<S>, I) -> O + Clone + 'static>
-    Validate<I, O> for Validator<S, F> {
+impl<
+    I, O, S: Clone + 'static, U: 'static, L: AsyncFnMut(&mut S) -> U + Clone + 'static,
+    F: FnMut(&mut Context, &Watched<S, U>, I) -> O + Clone + 'static,
+> Validate<I, O> for Validator<S, U, L, F> {
     fn validate(&mut self, ctx: &mut Context, input: I) -> O {(self.validate)(ctx, &self.source, input)}
-    fn change(&mut self) -> Pin<Box<dyn Future<Output = Option<()>> + '_>> {Box::pin(self.next())}
+    fn change(&mut self) -> Pin<Box<dyn Future<Output = Option<()>> + '_>> {
+        Box::pin(async {
+            self.source.latest = Some(Rc::new((self.listen)(&mut self.source.source).await));
+            Some(())
+        })
+    }
 }
 
 /// A validation callback with an explicitly watched dependency.
-#[derive(Clone)]
-pub struct Validator<S: ChangeSource, F> {
-    source: Watched<S>,
+pub struct Validator<S, U, L, F> {
+    source: Watched<S, U>,
+    listen: L,
     validate: F,
 }
-impl<S: ChangeSource, F> Validator<S, F> {
-    pub fn watch(source: S, validate: F) -> Self {
-        Self {source: Watched {source, latest: None}, validate}
+impl<S, U, L: AsyncFnMut(&mut S) -> U, F> Validator<S, U, L, F> {
+    /// `listen` waits for an update; `validate` receives the source and its latest result.
+    pub fn watch(source: S, listen: L, validate: F) -> Self {
+        Self {source: Watched {source, latest: None}, listen, validate}
     }
 }
-impl<S: ChangeSource, F: 'static> ChangeSource for Validator<S, F> {
-    type Update = ();
-    async fn next(&mut self) -> Option<()> {
-        self.source.latest = Some(Rc::new(self.source.source.next().await?));
-        Some(())
+impl<S: Clone, U, L: Clone, F: Clone> Clone for Validator<S, U, L, F> {
+    fn clone(&self) -> Self {
+        Self {
+            source: self.source.clone(), listen: self.listen.clone(), validate: self.validate.clone(),
+        }
     }
 }

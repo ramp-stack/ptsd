@@ -1,6 +1,8 @@
+use prism::Context;
 use prism::drawable::{Component, Drawable, Drawables, Layout};
-use prism::events::{Change, ChangeFuture, ChangeSource};
+use prism::events::{ChangeHandler, ListenFuture};
 
+use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
@@ -27,11 +29,6 @@ impl<L: Layout + Clone + 'static, D: Drawables + Clone + Debug + 'static> DerefM
     fn deref_mut(&mut self) -> &mut D {&mut self.1}
 }
 
-impl<L: Layout + Clone + 'static, D: Drawables + ChangeSource + Clone + Debug> ChangeSource for Bin<L, D> {
-    type Update = D::Update;
-    async fn next(&mut self) -> Option<Self::Update> {self.1.next().await}
-}
-
 #[derive(Debug, Clone)]
 pub struct Opt<D: Drawables + Clone + Debug + 'static>(Stack, D, bool);
 
@@ -50,10 +47,12 @@ impl<D: Drawables + Clone + Debug + 'static> Component for Opt<D> {
         if self.2 {self.1.drawables_mut()} else {vec![]}
     }
     fn layout(&self) -> &dyn Layout {&self.0}
-    fn changed(&mut self) -> ChangeFuture<'_> {
-        Box::pin(Change::select(self.children_mut().into_iter().enumerate().map(|(index, child)| {
-            Box::pin(async move {child.changed().await.child::<Self>(index)}) as ChangeFuture<'_>
-        }).collect()))
+    fn listen(&mut self) -> ListenFuture<'_> {
+        Box::pin(ChangeHandler::select(self.children_mut().into_iter().map(Drawable::listen).collect()))
+    }
+    fn update(&mut self, ctx: &mut Context, mut path: Vec<usize>, update: Box<dyn Any>) {
+        let index = path.pop().unwrap();
+        self.children_mut()[index].update(ctx, path, update);
     }
 }
 

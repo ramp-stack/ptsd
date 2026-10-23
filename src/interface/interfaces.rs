@@ -1,8 +1,10 @@
 use dyn_clone::clone_trait_object;
 use prism::Context;
-use prism::drawable::{Caret, Component, Drawable, Instruction, LayoutTree, RangeTree, Rect};
+use prism::drawable::{Component, Drawable, Instruction, LayoutTree, RangeTree, Rect};
 use prism::events::{ChildEvent, DynEvent, Event, EventHandler, OnEvent, WindowEvent, on_event};
 use prism::hardware::Keyboard;
+
+use std::any::Any;
 
 use crate::display::Opt;
 use crate::interface::navigation::{NavigationEvent, NavigationChanged, Pages};
@@ -31,9 +33,9 @@ pub trait Body: Drawable {
 clone_trait_object!(Body);
 
 impl Drawable for Box<dyn Body> {
-    fn caret(&self, layout: &LayoutTree) -> Option<Caret> {Drawable::caret(&**self, layout)}
-    fn changed(&mut self) -> prism::events::ChangeFuture<'_> {
-        Box::pin(async move {(**self).changed().await.map::<Self>(|boxed| &mut **boxed)})
+    fn listen(&mut self) -> prism::events::ListenFuture<'_> {(**self).listen()}
+    fn update(&mut self, ctx: &mut Context, path: Vec<usize>, update: Box<dyn Any>) {
+        (**self).update(ctx, path, update);
     }
     fn size_range(&self) -> RangeTree {Drawable::size_range(&**self)}
     fn layout(&mut self, size: (f32, f32), range: &RangeTree) -> LayoutTree {
@@ -52,9 +54,9 @@ pub trait Navigator: Drawable {}
 clone_trait_object!(Navigator);
 
 impl Drawable for Box<dyn Navigator> {
-    fn caret(&self, layout: &LayoutTree) -> Option<Caret> {Drawable::caret(&**self, layout)}
-    fn changed(&mut self) -> prism::events::ChangeFuture<'_> {
-        Box::pin(async move {(**self).changed().await.map::<Self>(|boxed| &mut **boxed)})
+    fn listen(&mut self) -> prism::events::ListenFuture<'_> {(**self).listen()}
+    fn update(&mut self, ctx: &mut Context, path: Vec<usize>, update: Box<dyn Any>) {
+        (**self).update(ctx, path, update);
     }
     fn size_range(&self) -> RangeTree {Drawable::size_range(&**self)}
     fn layout(&mut self, size: (f32, f32), range: &RangeTree) -> LayoutTree {

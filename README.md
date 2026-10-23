@@ -75,12 +75,16 @@ remain with the owner.
 
 The owner calls `observe` once for each event, before routing it to children. Supply the
 panel's resting rectangle in the same coordinate space as the event, or `None` while hidden.
-This parent-level observation allows a drag to start in adjacent content and cross the
-panel's edge. The final argument is the depth of the empty drag-handle strip inside that edge.
-Controls beyond that strip retain their normal touch activation and cannot start a drag.
+Drags start within a 12-pixel strip at the panel's content-facing edge: the top of a bottom
+panel, or the bottom of a top panel. The optional final argument adds a handle rectangle,
+such as an adjacent toolbar, in the same coordinate space. Gestures starting elsewhere stay
+with the content, so grids inside the panel can still scroll. Movement up to 8 logical pixels
+leaves the panel at rest. Beyond that threshold, movement toward dismissal takes over the
+gesture, with the threshold subtracted from its offset so the panel starts moving smoothly.
+Buttons inside a handle should activate on release so a drag can cancel their pending action.
 
 ```rust,ignore
-use prism::drawable::Area;
+use prism::drawable::{Area, Drawable};
 use ptsd::display::{Dismissible, DismissEdge};
 
 let mut banner = Dismissible::new(notification, DismissEdge::Top);
@@ -88,7 +92,11 @@ banner.reserve_space(true); // An overlay keeps its layout slot while sliding.
 
 // In the parent's event handler, after layout and before forwarding the event:
 let area = Area {offset: (0.0, 0.0), size: banner.size()};
-if banner.observe(&mut *event, showing.then_some(area), 12.0) {
+banner.observe(&mut *event, showing.then_some(area), None);
+
+// In the owner's update method, after selecting the banner's listener:
+Drawable::update(&mut banner, ctx, path, update);
+if banner.advance() {
     showing = false;
     // Hide the banner or emit the application's notification-dismissed event.
 }
@@ -97,8 +105,9 @@ if banner.observe(&mut *event, showing.then_some(area), 12.0) {
 By default the panel's occupied height shrinks as it moves, allowing neighboring content to
 expand. `reserve_space(true)` keeps that space unchanged. Align bottom panels to the bottom
 of their parent and top panels to the top. The resting rectangle must not move with the drag.
-`observe` neutralizes captured mouse events, preventing child presses or scrolling from
-continuing under the drag, and returns `true` once a completed dismissal has settled.
+`observe` neutralizes captured mouse events, cancelling child input during a drag. The owner
+includes the panel in its `listen` selection, forwards its winning `update`, then calls `advance`.
+`advance` returns `true` once dismissal finishes and explicitly renews its timer while settling.
 Short drags and reversals return to rest. Unpressed wheel input and trailing touch momentum
 do not begin a drag. Call `reset` when replacing, showing, or navigating away from a panel;
 hidden observation, resize, and focus loss also reset it.
@@ -132,7 +141,7 @@ A theme contains several resource collections:
 
 These resources allow UI systems to maintain consistent visual styling across an application.
 
-`Assets::get_image(&hardware, path)` and `get_asset_image(&hardware, name)` return backend raster
+`Assets::get_image(path)` and `get_asset_image(name)` return backend raster
 `Image` handles. `get_svg(path)` and `get_asset_svg(name)` return validated `Svg` drawables.
 Each collection retains shared content handles; cloned assets and themes reuse them. Raster pixels
 decode lazily, and display resizing reuses their GPU texture. SVGs rasterize at their physical

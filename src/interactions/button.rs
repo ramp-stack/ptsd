@@ -1,6 +1,6 @@
 use prism::Context;
 use prism::drawable::{Component, Drawable};
-use prism::events::{on_change, on_event, ChangeSource, DynEvent, OnEvent, OnChange, Timer};
+use prism::events::{on_change, on_event, DynEvent, OnEvent, OnChange, Timer};
 
 use std::time::Duration;
 
@@ -137,7 +137,7 @@ impl OnEvent<event::Button> for _Button {
     }
 }
 
-#[on_change(ChangeSource::changed(&mut self.feedback))]
+#[on_change(self.feedback.next())]
 impl OnChange<()> for _Button {
     fn on_change(&mut self, _ctx: &mut Context, _: ()) {
         self.is_pressed = false;
