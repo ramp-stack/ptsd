@@ -1,9 +1,10 @@
 use prism::Context;
 use prism::drawable::{Area, Component, Drawable, Layout, SizeRange};
 use prism::events::{
-    Change, ChangeSource, DynEvent, MouseButton, MouseEvent, MouseState, Timer, WindowEvent,
+    ChangeHandler, ListenFuture, DynEvent, MouseButton, MouseEvent, MouseState, Timer, WindowEvent,
 };
 
+use std::any::Any;
 use std::cell::Cell;
 use std::time::{Duration, Instant};
 
@@ -13,11 +14,12 @@ pub enum DismissEdge {Top, Bottom}
 
 /// A panel that follows a drag toward its edge, then dismisses or returns to rest.
 ///
-/// Its owner calls `observe` before routing events to children so a drag can begin outside
-/// the panel. Inside it, child controls take priority over background drags.
-/// Consume it through `OnChange`, apply the returned `Change` to this panel, then call `advance`.
+/// Its owner calls `observe` before routing events to children. Drags begin in the 12-pixel
+/// content-facing edge strip or an additional handle area supplied by the owner.
+/// Movement up to 8 logical pixels leaves the panel at rest; captured drags cancel child input.
+/// Its owner forwards the winning update to this panel, then calls `advance`.
 #[derive(Debug, Component, Clone)]
-#[after_event]
+#[listen]
 pub struct Dismissible<D: Drawable + Clone> {
     layout: SlideLayout,
     pub child: D,
@@ -65,10 +67,9 @@ impl<D: Drawable + Clone> Dismissible<D> {
     /// Observe each parent event once, before passing it to children.
     ///
     /// `area` is the panel's resting rectangle in the event's coordinate space; pass `None`
-    /// while hidden. Drags may start in unused panel space or outside its content-facing edge,
-    /// within the panel's horizontal span.
-    /// Captured mouse events are neutralized to cancel child presses and scrolling.
-    pub fn observe(&mut self, event: &mut dyn DynEvent, area: Option<Area>) {
+    /// while hidden. `handle` adds a drag-start rectangle in the same coordinate space, such
+    /// as a toolbar above the panel. Gestures starting elsewhere stay with the content.
+    pub fn observe(&mut self, event: &mut dyn DynEvent, area: Option<Area>, handle: Option<Area>) {
         if area.is_none() || matches!(event.downcast_ref::<WindowEvent>(),
             Some(WindowEvent::Resized(_) | WindowEvent::Focused(false))) {self.reset();}
 
@@ -79,7 +80,7 @@ impl<D: Drawable + Clone> Dismissible<D> {
         }
         let consumed = if matches!(mouse.state, MouseState::Scroll(..)) && self.momentum.is_some()
             && (mouse.position.is_none() || mouse.position == self.momentum) {true}
-        else if let Some(area) = area {self.track(mouse, area, now)}
+        else if let Some(area) = area {self.track(mouse, area, handle, now)}
         else {false};
 
         if consumed {
@@ -88,32 +89,47 @@ impl<D: Drawable + Clone> Dismissible<D> {
         }
     }
 
-    fn after_event(&mut self, ctx: &mut Context, event: &dyn DynEvent, pointer_claimed: bool) {
-        if matches!(event.downcast_ref::<MouseEvent>(),
-            Some(MouseEvent {position: Some(_), state: MouseState::Pressed(MouseButton::Left)}))
-            && matches!(self.drag, Drag::Possible {..}) {
-            if pointer_claimed {self.drag = Drag::Idle;}
-            else {ctx.claim_pointer();}
+    fn listen(&mut self) -> ListenFuture<'_> {
+        Box::pin(ChangeHandler::select(vec![
+            Drawable::listen(&mut self.child),
+            Box::pin(async {
+                self.timer.next().await;
+                (vec![], Box::new(()) as Box<dyn Any>)
+            }),
+        ]))
+    }
+
+    fn update(&mut self, ctx: &mut Context, mut path: Vec<usize>, update: Box<dyn Any>) {
+        match path.pop().unwrap() {
+            0 => self.child.update(ctx, path, update),
+            1 => {},
+            _ => unreachable!(),
         }
     }
 
-    fn track(&mut self, mouse: &MouseEvent, area: Area, now: Instant) -> bool {
+    fn track(&mut self, mouse: &MouseEvent, area: Area, handle: Option<Area>, now: Instant) -> bool {
         let direction = match self.layout.edge {DismissEdge::Top => -1.0, DismissEdge::Bottom => 1.0};
         let height = area.size.1;
         match mouse.state {
             MouseState::Pressed(MouseButton::Left) => {
                 self.reset();
-                let edge = area.offset.1 + if direction < 0.0 {height} else {0.0};
-                if let Some(origin) = mouse.position
-                    && origin.0 >= area.offset.0 && origin.0 < area.offset.0 + area.size.0
-                    && (origin.1 - edge) * direction < height {
-                    let inside = ((origin.1 - edge) * direction).max(0.0);
-                    self.drag = Drag::Possible {origin, anchor: edge + inside * direction, started: now};
+                let strip = height.min(12.0);
+                let edge = Area {
+                    offset: (area.offset.0, area.offset.1 + if direction < 0.0 {height - strip} else {0.0}),
+                    size: (area.size.0, strip),
+                };
+                if let Some(origin) = mouse.position {
+                    let inside = |area: Area| origin.0 >= area.offset.0
+                        && origin.0 < area.offset.0 + area.size.0 && origin.1 >= area.offset.1
+                        && origin.1 < area.offset.1 + area.size.1;
+                    if inside(edge) || handle.is_some_and(inside) {
+                        self.drag = Drag::Possible {origin, started: now};
+                    }
                 }
             }
             MouseState::Moved | MouseState::Scroll(..) => {
                 match self.drag {
-                    Drag::Possible {origin, anchor, started} => {
+                    Drag::Possible {origin, started} => {
                         let Some(position) = mouse.position else {
                             self.drag = Drag::Idle;
                             return false;
@@ -122,8 +138,9 @@ impl<D: Drawable + Clone> Dismissible<D> {
                         let dy = (position.1 - origin.1) * direction;
                         if dx.abs() > 8.0 && dx.abs() >= dy.abs() || dy < -8.0 {
                             self.drag = Drag::Idle;
-                        } else if dy > 8.0 && dy > dx.abs() && (position.1 - anchor) * direction > 0.0 {
-                            self.layout.offset = ((position.1 - anchor) * direction).clamp(0.0, height);
+                        } else if dy > 8.0 && dy > dx.abs() {
+                            let anchor = origin.1 + direction * 8.0;
+                            self.layout.offset = (dy - 8.0).min(height);
                             self.drag = Drag::Active {
                                 origin, anchor, last: (position.1, now),
                                 velocity: dy / now.duration_since(started).as_secs_f32().max(0.001),
@@ -183,25 +200,10 @@ impl<D: Drawable + Clone> Dismissible<D> {
     }
 }
 
-impl<D: Drawable + Clone> ChangeSource for Dismissible<D> {
-    type Update = Change;
-    async fn next(&mut self) -> Option<Change> {
-        Some(Change::select(vec![
-            Box::pin(async {
-                self.child.changed().await.map::<Self>(|panel| &mut panel.child)
-            }),
-            Box::pin(async {
-                ChangeSource::changed(&mut self.timer).await;
-                Change::new(|_, _| {})
-            }),
-        ]).await)
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 enum Drag {
     Idle,
-    Possible {origin: (f32, f32), anchor: f32, started: Instant},
+    Possible {origin: (f32, f32), started: Instant},
     Active {origin: (f32, f32), anchor: f32, last: (f32, Instant), velocity: f32},
     Settling {from: f32, to: f32, started: Instant},
 }

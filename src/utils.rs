@@ -2,9 +2,8 @@ use chrono::{Datelike, Timelike};
 pub use chrono::{DateTime, Local, Utc, Duration};
 use prism::{Context, drawable::Drawable};
 use prism::drawable::Svg;
-use prism::hardware::{Hardware, Image};
+use prism::hardware::Image;
 use include_dir::{DirEntry, Dir, File};
-use prism::events::ChangeSource;
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
@@ -127,11 +126,6 @@ pub trait ValidationFn: for<'a> Validate<Vec<&'a mut Box<dyn Drawable>>, bool> {
 impl<V: for<'a> Validate<Vec<&'a mut Box<dyn Drawable>>, bool>> ValidationFn for V {}
 dyn_clone::clone_trait_object!(ValidationFn);
 
-impl ChangeSource for Box<dyn ValidationFn> {
-    type Update = ();
-    async fn next(&mut self) -> Option<()> {self.change().await}
-}
-
 impl std::fmt::Debug for dyn ValidationFn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {  write!(f, "ValidationFn...") }
 }
@@ -169,11 +163,11 @@ impl Assets {
         }
     }
     pub fn all(&self) -> &Vec<Dir<'static>> {&self.inner}
-    pub fn get_image(&self, hardware: &Hardware, path: &str) -> Option<Image> {
+    pub fn get_image(&self, path: &str) -> Option<Image> {
         let file = self.find_file(path)?;
         let key = file.path().to_string_lossy().into_owned();
         Some(self.images.lock().unwrap().entry(key).or_insert_with(|| {
-            hardware.read_image(file.contents()).expect("Invalid image asset")
+            Image::read(file.contents()).expect("Invalid image asset")
         }).clone())
     }
     pub fn get_font(&self, path: &str) -> Option<Vec<u8>> {
@@ -189,13 +183,13 @@ impl Assets {
     pub fn load_file(&self, path: &str) -> Option<Vec<u8>> {
         Some(self.find_file(path)?.contents().to_vec())
     }
-    pub fn get_asset_image(&self, hardware: &Hardware, name: &str) -> Option<Image> {
+    pub fn get_asset_image(&self, name: &str) -> Option<Image> {
         let file = self.files().into_iter().find(|file| {
             file.path().with_extension("").ends_with(name)
                 && file.path().extension().is_some_and(|ext| matches!(ext.to_str(),
                     Some("png" | "jpg" | "jpeg")))
         })?;
-        self.get_image(hardware, &file.path().to_string_lossy())
+        self.get_image(&file.path().to_string_lossy())
     }
     pub fn get_asset_svg(&self, name: &str) -> Option<Svg> {
         let file = self.files().into_iter().find(|file| {

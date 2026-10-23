@@ -1,7 +1,8 @@
 use prism::Context;
 use prism::drawable::{Area, Component, Drawable, Instruction, Layout, LayoutTree, RangeTree, Rect};
-use prism::events::{Change, ChangeFuture, ChildEvent, DynEvent};
+use prism::events::{ChangeHandler, ListenFuture, ChildEvent, DynEvent};
 
+use std::any::Any;
 use std::sync::{Arc, Mutex};
 
 use crate::display::Bin;
@@ -66,15 +67,17 @@ impl _Slider {
 }
 
 impl Drawable for _Slider {
-    fn changed(&mut self) -> ChangeFuture<'_> {
-        let children: [(&mut dyn Drawable, fn(&mut Self) -> &mut dyn Drawable); 3] = [
-            (&mut self.background, |slider| &mut slider.background),
-            (&mut self.foreground, |slider| &mut slider.foreground),
-            (&mut self.handle, |slider| &mut slider.handle),
+    fn listen(&mut self) -> ListenFuture<'_> {
+        Box::pin(ChangeHandler::select(vec![
+            Drawable::listen(&mut self.background), Drawable::listen(&mut self.foreground),
+            Drawable::listen(&mut self.handle),
+        ]))
+    }
+    fn update(&mut self, ctx: &mut Context, mut path: Vec<usize>, update: Box<dyn Any>) {
+        let children: [&mut dyn Drawable; 3] = [
+            &mut self.background, &mut self.foreground, &mut self.handle,
         ];
-        Box::pin(Change::select(children.into_iter().map(|(child, access)| {
-            Box::pin(async move {child.changed().await.map::<Self>(access)}) as ChangeFuture<'_>
-        }).collect()))
+        children[path.pop().unwrap()].update(ctx, path, update);
     }
     fn size_range(&self) -> RangeTree {
         let requests = vec![

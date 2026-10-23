@@ -1,7 +1,9 @@
 use dyn_clone::clone_trait_object;
 use prism::Context;
-use prism::drawable::{Caret, Component, Drawable, Instruction, LayoutTree, RangeTree, Rect};
-use prism::events::{ChangeFuture, ChildEvent, DynEvent, Event, OnEvent, on_event};
+use prism::drawable::{Component, Drawable, Instruction, LayoutTree, RangeTree, Rect};
+use prism::events::{ListenFuture, ChildEvent, DynEvent, Event, OnEvent, on_event};
+
+use std::any::Any;
 
 use crate::display::{EitherOr, Enum};
 use crate::layout::{Offset, Padding, Size, Stack};
@@ -60,9 +62,9 @@ pub trait FlowContainer: Drawable {
 clone_trait_object!(FlowContainer);
 
 impl Drawable for Box<dyn FlowContainer> {
-    fn caret(&self, layout: &LayoutTree) -> Option<Caret> {Drawable::caret(&**self, layout)}
-    fn changed(&mut self) -> ChangeFuture<'_> {
-        Box::pin(async move {(**self).changed().await.map::<Self>(|boxed| &mut **boxed)})
+    fn listen(&mut self) -> ListenFuture<'_> {(**self).listen()}
+    fn update(&mut self, ctx: &mut Context, path: Vec<usize>, update: Box<dyn Any>) {
+        (**self).update(ctx, path, update);
     }
     fn size_range(&self) -> RangeTree {Drawable::size_range(&**self)}
     fn layout(&mut self, size: (f32, f32), range: &RangeTree) -> LayoutTree {
@@ -82,9 +84,9 @@ downcast_rs::impl_downcast!(AppPage);
 clone_trait_object!(AppPage);
 
 impl Drawable for Box<dyn AppPage> {
-    fn caret(&self, layout: &LayoutTree) -> Option<Caret> {Drawable::caret(&**self, layout)}
-    fn changed(&mut self) -> ChangeFuture<'_> {
-        Box::pin(async move {(**self).changed().await.map::<Self>(|boxed| &mut **boxed)})
+    fn listen(&mut self) -> ListenFuture<'_> {(**self).listen()}
+    fn update(&mut self, ctx: &mut Context, path: Vec<usize>, update: Box<dyn Any>) {
+        (**self).update(ctx, path, update);
     }
     fn size_range(&self) -> RangeTree {Drawable::size_range(&**self)}
     fn layout(&mut self, size: (f32, f32), range: &RangeTree) -> LayoutTree {

@@ -1,5 +1,5 @@
 use prism::Context;
-use prism::drawable::{Caret, Component, Drawable, LayoutTree};
+use prism::drawable::{Component, Drawable};
 use prism::events::{
     DynEvent, Key, KeyboardEvent, KeyboardState, MouseButton, MouseEvent, MouseState, WindowEvent,
 };
@@ -24,7 +24,6 @@ impl<D: Drawable + Clone> Button<D> {
         if let Some(mouse) = incoming.downcast_ref::<MouseEvent>() {
             match mouse.state {
                 MouseState::Pressed(MouseButton::Left) if mouse.position.is_some() => {
-                    ctx.claim_pointer();
                     let (x, y) = mouse.position.unwrap();
                     self.2 = Some(PressState {
                         started: Instant::now(), origin: (x as f64, y as f64), cancelled: false,
@@ -106,7 +105,6 @@ impl<D: Drawable + Clone> Selectable<D> {
     fn on_event(&mut self, ctx: &mut Context, incoming: Box<dyn DynEvent>) -> Vec<Box<dyn DynEvent>> {
         if let Some(MouseEvent {position: Some(_), state: MouseState::Pressed(MouseButton::Left)}) =
             incoming.downcast_ref::<MouseEvent>() {
-            ctx.claim_pointer();
             self.select(ctx);
         } else if let Some(event::Selectable::Pressed(id, group_id)) = incoming.downcast_ref()
             && *group_id == self.3.to_string() {
@@ -122,11 +120,10 @@ pub struct Slider<D: Drawable + Clone>(Stack, pub D, #[skip] bool);
 impl<D: Drawable + Clone> Slider<D> {
     pub fn new(child: D) -> Self {Self(Stack::default(), child, false)}
 
-    fn on_event(&mut self, ctx: &mut Context, incoming: Box<dyn DynEvent>) -> Vec<Box<dyn DynEvent>> {
+    fn on_event(&mut self, _ctx: &mut Context, incoming: Box<dyn DynEvent>) -> Vec<Box<dyn DynEvent>> {
         if let Some(MouseEvent {state, position}) = incoming.downcast_ref() {
             return match (state, position) {
                 (MouseState::Pressed(MouseButton::Left), Some((x, _))) => {
-                    ctx.claim_pointer();
                     self.2 = true;
                     prism::events![event::Slider::Start(*x)]
                 }
@@ -146,7 +143,6 @@ impl<D: Drawable + Clone> Slider<D> {
 
 #[derive(Debug, Component, Clone)]
 #[on_dyn_event]
-#[caret]
 pub struct TextInput<D: Drawable + Clone>(Stack, pub D, #[skip] Option<bool>);
 impl<D: Drawable + Clone> TextInput<D> {
     pub fn new(child: D, requires_focus: bool) -> Selectable<Self> {
@@ -154,10 +150,6 @@ impl<D: Drawable + Clone> TextInput<D> {
             Self(Stack::default(), child, requires_focus.then_some(false)),
             uuid::uuid!("123e4567-e89b-12d3-a456-426614174000"),
         )
-    }
-
-    fn caret(&self, layout: &LayoutTree) -> Option<Caret> {
-        self.2.unwrap_or(true).then(|| layout.caret(self.children())).flatten()
     }
 
     fn on_event(&mut self, ctx: &mut Context, incoming: Box<dyn DynEvent>) -> Vec<Box<dyn DynEvent>> {
@@ -169,7 +161,6 @@ impl<D: Drawable + Clone> TextInput<D> {
             let mut events: Vec<Box<dyn DynEvent>> = vec![];
             match mouse.state {
                 MouseState::Pressed(MouseButton::Left) if mouse.position.is_some() => {
-                    ctx.claim_pointer();
                     if let Some(focus) = &mut self.2 {*focus = true;}
                     events.push(Box::new(event::TextInput::Focused(true)));
                 }
@@ -214,10 +205,7 @@ impl<D: Drawable + Clone> Scrollable<D> {
         Self(layout, child)
     }
 
-    fn on_event(&mut self, ctx: &mut Context, incoming: Box<dyn DynEvent>) -> Vec<Box<dyn DynEvent>> {
-        if matches!(incoming.downcast_ref::<MouseEvent>(), Some(MouseEvent {
-            state: MouseState::Pressed(MouseButton::Left) | MouseState::Scroll(..), position: Some(_),
-        })) {ctx.claim_pointer();}
+    fn on_event(&mut self, _ctx: &mut Context, incoming: Box<dyn DynEvent>) -> Vec<Box<dyn DynEvent>> {
         if let Some(event::Scrollable::ScrollTo(y)) = incoming.downcast_ref() {
             self.0.set_scroll(*y);
         }
