@@ -1,68 +1,41 @@
-use prism::event::{self, OnEvent, Event, TickEvent, MouseEvent, MouseState, MouseButton};
-use prism::drawable::{Drawable, Component, SizedTree};
-use prism::display::Enum;
-use prism::layout::Stack;
-use prism::{emitters, Context};
+use prism::Context;
+use prism::drawable::{Component, Drawable};
+use prism::events::{on_change, on_event, ChangeSource, DynEvent, OnEvent, OnChange, Timer};
 
-use std::time::{Instant, Duration};
+use std::time::Duration;
 
+use crate::display::Enum;
+use crate::emitters;
+use crate::events as event;
+use crate::layout::Stack;
 use crate::utils::Callback;
 
 #[derive(Component, Debug, Clone)]
-pub struct Button(Stack, emitters::Button<_Button>, #[skip] Option<Option<(f32, f32)>>);
-
-impl OnEvent for Button {
-    fn on_event(&mut self, _ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
-        if event.downcast_ref::<TickEvent>().is_some() {
-            self.2 = None;
-        } else if let Some(mouse) = event.downcast_ref::<MouseEvent>() {
-            match mouse.state {
-                MouseState::Released(MouseButton::Left) if !self.1.1.is_pressed => {
-                    self.2 = Some(mouse.position);
-                }
-                MouseState::Pressed(MouseButton::Left) if mouse.position.is_some() => {
-                    if let Some(position) = self.2.take() {
-                        let release = MouseEvent { position, state: MouseState::Released(MouseButton::Left) };
-                        return vec![event, Box::new(release)];
-                    }
-                }
-                _ => {}
-            }
-        }
-        vec![event]
-    }
-}
-
+pub struct Button(Stack, emitters::Button<_Button>);
 impl Button {
     pub fn new(
-        default: impl Drawable + 'static,
-        hover: Option<impl Drawable + 'static>,
-        pressed: Option<impl Drawable + 'static>,
-        disabled: Option<impl Drawable + 'static>,
-        feedback: Option<impl Drawable + 'static>,
-        callback: impl FnMut(&mut Context) + Clone + 'static,
-        disableable: bool,
+        default: impl Drawable, hover: Option<impl Drawable>, pressed: Option<impl Drawable>,
+        disabled: Option<impl Drawable>, feedback: Option<impl Drawable>,
+        callback: impl FnMut(&mut Context) + Clone + 'static, disableable: bool,
     ) -> Self {
-        let button = _Button::new(default, hover, pressed, disabled, feedback, callback, disableable, false);
-        Self(Stack::default(), emitters::Button::new(button), None)
+        let button = _Button::new(
+            default, hover, pressed, disabled, feedback, callback, disableable, false,
+        );
+        Self(Stack::default(), emitters::Button::new(button))
     }
 
     pub fn new_triggers_on_release(
-        default: impl Drawable + 'static,
-        hover: Option<impl Drawable + 'static>,
-        pressed: Option<impl Drawable + 'static>,
-        disabled: Option<impl Drawable + 'static>,
-        feedback: Option<impl Drawable + 'static>,
-        callback: impl FnMut(&mut Context) + Clone + 'static,
-        disableable: bool,
+        default: impl Drawable, hover: Option<impl Drawable>, pressed: Option<impl Drawable>,
+        disabled: Option<impl Drawable>, feedback: Option<impl Drawable>,
+        callback: impl FnMut(&mut Context) + Clone + 'static, disableable: bool,
     ) -> Self {
-        let button = _Button::new(default, hover, pressed, disabled, feedback, callback, disableable, true);
-        Self(Stack::default(), emitters::Button::new(button), None)
+        let button = _Button::new(
+            default, hover, pressed, disabled, feedback, callback, disableable, true,
+        );
+        Self(Stack::default(), emitters::Button::new(button))
     }
 
-    pub fn set_trigger_on_release(&mut self) {
-        self.1.1.triggers_on_release = true;
-    }
+    pub fn set_trigger_on_release(&mut self) {self.1.1.triggers_on_release = true;}
 }
 
 impl std::ops::Deref for Button {
@@ -74,7 +47,8 @@ impl std::ops::DerefMut for Button {
     fn deref_mut(&mut self) -> &mut Self::Target {&mut self.1.1}
 }
 
-#[derive(Component, Clone)]
+/// Button state exposed through `Button`'s `Deref` implementation for its state-changing methods.
+#[derive(Component, Clone, Debug)]
 pub struct _Button {
     layout: Stack,
     displays: Enum<Box<dyn Drawable>>,
@@ -83,72 +57,62 @@ pub struct _Button {
     #[skip] disableable: bool,
     #[skip] triggers_on_release: bool,
     #[skip] is_pressed: bool,
-    #[skip] active_label: Option<(Instant, String)>
+    #[skip] feedback: Timer,
 }
-
 impl _Button {
-    #[allow(clippy::too_many_arguments)] // by one
     pub fn new(
-        default: impl Drawable + 'static,
-        hover: Option<impl Drawable + 'static>,
-        pressed: Option<impl Drawable + 'static>,
-        disabled: Option<impl Drawable + 'static>,
-        feedback: Option<impl Drawable + 'static>,
+        default: impl Drawable, hover: Option<impl Drawable>, pressed: Option<impl Drawable>,
+        disabled: Option<impl Drawable>, feedback: Option<impl Drawable>,
         callback: impl FnMut(&mut Context) + Clone + 'static,
-        disableable: bool,
-        triggers_on_release: bool,
+        disableable: bool, triggers_on_release: bool,
     ) -> Self {
-        let mut items: Vec<(String, Box<dyn Drawable>)> = Vec::new();
-        items.push(("default".to_string(), Box::new(default)));
-        if let Some(h) = hover { items.push(("hover".to_string(), Box::new(h))) }
-        if let Some(p) = pressed { items.push(("pressed".to_string(), Box::new(p))) }
-        if let Some(d) = disabled { items.push(("disabled".to_string(), Box::new(d))) }
-        if let Some(d) = feedback { items.push(("feedback".to_string(), Box::new(d))) }
-
-        _Button {
-            layout: Stack::default(),
-            displays: Enum::new(items, "default".to_string()),
-            disabled: false,
-            on_click: Box::new(callback),
-            disableable,
-            triggers_on_release,
-            is_pressed: false,
-            active_label: None,
+        let mut items: Vec<(String, Box<dyn Drawable>)> = vec![
+            ("default".to_string(), Box::new(default)),
+        ];
+        if let Some(hover) = hover {items.push(("hover".to_string(), Box::new(hover)));}
+        if let Some(pressed) = pressed {items.push(("pressed".to_string(), Box::new(pressed)));}
+        if let Some(disabled) = disabled {items.push(("disabled".to_string(), Box::new(disabled)));}
+        if let Some(feedback) = feedback {items.push(("feedback".to_string(), Box::new(feedback)));}
+        Self {
+            layout: Stack::default(), displays: Enum::new(items, "default".to_string()),
+            disabled: false, on_click: Box::new(callback), disableable, triggers_on_release,
+            is_pressed: false, feedback: Timer::default(),
         }
     }
 
     pub fn disable(&mut self, disable: bool) {
         if self.disabled != disable {
             self.disabled = disable;
-
-            match self.disabled {
-                true => self.displays.display("disabled"),
-                false => self.displays.display("default")
-            };
+            self.feedback.cancel();
+            self.is_pressed = false;
+            self.displays.display(if disable {"disabled"} else {"default"});
         }
     }
 
     pub fn on_click(&mut self) -> &mut Box<dyn Callback> {&mut self.on_click}
 
     fn callback(&mut self, ctx: &mut Context) {
-        ctx.trigger_haptic();
+        ctx.hardware.trigger_haptic();
         (self.on_click)(ctx);
     }
 
     fn display(&mut self, display: &str) {
         if self.displays.display("feedback") {
-            self.active_label = Some((Instant::now(), display.to_string()))
+            self.feedback.reset(Duration::from_secs(1));
         } else {
-            let _ = self.displays.display(display);
+            self.displays.display(display);
         }
     }
+}
 
-    fn handle_button_event(&mut self, ctx: &mut Context, event: event::Button) {
+#[on_event]
+impl OnEvent<event::Button> for _Button {
+    fn on(&mut self, ctx: &mut Context, event: event::Button) -> Vec<Box<dyn DynEvent>> {
         if let event::Button::Disable(disable) = event {
-            if self.disableable { self.disable(disable);} 
-        } else if !self.disabled && self.active_label.is_none() {
+            if self.disableable {self.disable(disable);}
+        } else if !self.disabled && !self.feedback.is_active() {
             match event {
-                event::Button::Hover(true) if !self.is_pressed => {self.displays.display("hover");},
+                event::Button::Hover(true) if !self.is_pressed => {self.displays.display("hover");}
                 event::Button::Pressed(true) => {
                     self.is_pressed = true;
                     if !self.triggers_on_release {
@@ -158,45 +122,25 @@ impl _Button {
                 }
                 event::Button::Pressed(false) => {
                     let should_trigger = self.is_pressed && self.triggers_on_release;
-
                     self.is_pressed = false;
                     self.display("default");
-
-                    if should_trigger {
-                        self.callback(ctx);
-                    }
+                    if should_trigger {self.callback(ctx);}
                 }
-
                 event::Button::Hover(false) => {
                     self.is_pressed = false;
                     self.displays.display("default");
                 }
-                // event::Button::Disable(_) => {},
-                _ => {} //self.1.display("default"),
+                _ => {}
             }
         }
+        vec![]
     }
 }
 
-impl OnEvent for _Button {
-    fn on_event(&mut self, ctx: &mut Context, _sized: &SizedTree, event: Box<dyn Event>) -> Vec<Box<dyn Event>> {
-        if event.downcast_ref::<TickEvent>().is_some() {
-            if let Some((timer, _)) = &self.active_label
-                && timer.elapsed() >= Duration::from_millis(1000) {
-                self.active_label = None;
-                self.is_pressed = false;
-                self.displays.display(if self.disabled {"disabled"} else {"default"});
-            }
-        } else if let Some(event) = event.downcast_ref::<event::Button>() {
-            self.handle_button_event(ctx, *event);
-            return vec![];
-        }
-
-        vec![event]
-    }
-}
-impl std::fmt::Debug for _Button {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "_Button")
+#[on_change(ChangeSource::changed(&mut self.feedback))]
+impl OnChange<()> for _Button {
+    fn on_change(&mut self, _ctx: &mut Context, _: ()) {
+        self.is_pressed = false;
+        self.displays.display(if self.disabled {"disabled"} else {"default"});
     }
 }

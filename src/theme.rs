@@ -1,15 +1,26 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use image::RgbaImage;
-use include_dir::{DirEntry, include_dir, Dir};
-use prism::canvas;
+use prism::drawable::Svg;
+use include_dir::include_dir;
+use prism::drawable::text::Font;
 
+use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Display;
 
 use crate::utils::Assets;
 pub use crate::color::Color;
 pub use crate::colors::*;
+
+#[derive(Debug)]
+pub enum FontStyle {Heading, Text, Label}
+impl fmt::Display for FontStyle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {write!(f, "FontStyle::{self:?}")}
+}
+
+#[derive(Debug, Default, Copy, Clone)]
+pub enum TextSize {Title, H1, H2, H3, H4, H5, H6, Xl, #[default] Lg, Md, Sm, Xs}
+impl fmt::Display for TextSize {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {write!(f, "TextSize::{self:?}")}
+}
 
 #[derive(Default, Clone, Debug)]
 pub struct Theme {
@@ -19,15 +30,21 @@ pub struct Theme {
 }
 
 impl Theme {
-    pub fn light(assets: &Vec<Dir<'static>>, color: Color) -> Self {
-        Theme { colors: ColorResources::light(color), icons: IconResources::new(assets), fonts: FontResources::default() }
+    pub fn light(assets: &Assets, color: Color) -> Self {
+        Self {
+            colors: ColorResources::light(color), icons: IconResources::new(assets),
+            fonts: FontResources::default(),
+        }
     }
 
-    pub fn dark(assets: &Vec<Dir<'static>>, color: Color) -> Self {
-        Theme { colors: ColorResources::dark(color), icons: IconResources::new(assets), fonts: FontResources::default() }
+    pub fn dark(assets: &Assets, color: Color) -> Self {
+        Self {
+            colors: ColorResources::dark(color), icons: IconResources::new(assets),
+            fonts: FontResources::default(),
+        }
     }
 
-    pub fn from(assets: &Vec<Dir<'static>>, color: Color) -> (Self, bool) {
+    pub fn from(assets: &Assets, color: Color) -> (Self, bool) {
         let is_dark = color.is_high_contrast();
         (if is_dark {Self::dark(assets, color)} else {Self::light(assets, color)}, is_dark)
     }
@@ -36,11 +53,11 @@ impl Theme {
 #[derive(Debug, Clone)]
 pub struct FontResources {
     sizes: HashMap<String, f32>,
-    fonts: HashMap<String, canvas::Font>,
+    fonts: HashMap<String, Font>,
 }
 
 impl FontResources {
-    pub fn insert_font<K: Display>(&mut self, key: K, font: canvas::Font) {
+    pub fn insert_font<K: Display>(&mut self, key: K, font: Font) {
         self.fonts.insert(key.to_string(), font);
     }
 
@@ -48,19 +65,15 @@ impl FontResources {
         self.sizes.insert(key.to_string(), size);
     }
 
-    pub fn get_font<K: Display>(&self, key: K) -> Option<&canvas::Font> {
-        self.fonts.get(&key.to_string())
-    }
+    pub fn get_font<K: Display>(&self, key: K) -> Option<&Font> {self.fonts.get(&key.to_string())}
 
-    pub fn get_size<K: Display>(&self, key: K) -> f32 {
-        self.sizes.get(&key.to_string()).copied().unwrap_or_default()
-    }
+    pub fn get_size<K: Display>(&self, key: K) -> f32 {*self.sizes.get(&key.to_string()).unwrap()}
 }
 
 impl Default for FontResources {
     fn default() -> Self {
-        let bold = canvas::Font::from_bytes(include_bytes!("../resources/fonts/outfit_bold.ttf")).unwrap();
-        let regular = canvas::Font::from_bytes(include_bytes!("../resources/fonts/outfit_regular.ttf")).unwrap();
+        let bold = Font::from_bytes(include_bytes!("../resources/fonts/outfit_bold.ttf")).unwrap();
+        let regular = Font::from_bytes(include_bytes!("../resources/fonts/outfit_regular.ttf")).unwrap();
         let mut resources = FontResources {fonts: HashMap::new(), sizes: HashMap::new()};
         resources.insert_font(FontStyle::Heading, bold.clone());
         resources.insert_font(FontStyle::Text, regular);
@@ -81,88 +94,43 @@ impl Default for FontResources {
     }
 }
 
-pub enum FontStyle {Heading, Text, Label}
-impl fmt::Display for FontStyle { fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "FontStyle::{}", match self { 
-    FontStyle::Heading => "Heading", FontStyle::Text => "Text", FontStyle::Label => "Label" 
-}) } }
-
-#[derive(Debug, Default, Copy, Clone)]
-pub enum TextSize {Title, H1, H2, H3, H4, H5, H6, Xl, #[default] Lg, Md, Sm, Xs}
-impl fmt::Display for TextSize { fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "TextSize::{}", match self { 
-    TextSize::Title => "Title", TextSize::H1 => "H1", TextSize::H2 => "H2", TextSize::H3 => "H3", TextSize::H4 => "H4", 
-    TextSize::H5 => "H5", TextSize::H6 => "H6", TextSize::Xl => "Xl", TextSize::Lg => "Lg", TextSize::Md => "Md", 
-    TextSize::Sm => "Sm", TextSize::Xs => "Xs" 
-}) } }
-
-
-/// - Icons will automatically be added to resources when they meet these conditions:
-///     - Icons must be `.svg` files.
-///     - Icons must be located in `project/resources/icons/`.
 #[derive(Debug, Clone)]
-pub struct IconResources{
-    stored: HashMap<String, Arc<RgbaImage>>,
-    public: HashMap<String, Arc<RgbaImage>>,
+pub struct IconResources {
+    stored: HashMap<String, Svg>,
+    public: HashMap<String, Svg>,
 }
 impl IconResources {
-    pub fn new(assets: &Vec<Dir<'static>>) -> Self {
-        let mut resources = IconResources::default();
-        assets.iter().for_each(|a| resources.include(a));
+    pub fn new(assets: &Assets) -> Self {
+        let mut resources = Self {stored: HashMap::new(), public: HashMap::new()};
+        resources.include(assets);
+        for (name, image) in Self::default().stored {resources.stored.entry(name).or_insert(image);}
         resources
     }
-
-    fn include(&mut self, assets: &Dir<'static>) {
-        fn walk(map: &mut HashMap<String, Arc<RgbaImage>>, dir: &Dir<'static>) {
-            for entry in dir.entries() {
-                match entry {
-                    DirEntry::File(f)
-                        if f.path().extension().and_then(|e| e.to_str()) == Some("svg") =>
-                    {
-                        let name = f.path().to_str().unwrap();
-                        let name = name.strip_prefix("icons/").unwrap_or(name);
-                        let name = name.strip_suffix(".svg").unwrap_or(name)
-                            .replace(' ', "_");
-
-                        map.insert(name, Arc::new(Assets::load_svg(f.contents())));
-                    }
-                    DirEntry::Dir(d) => walk(map, d),
-                    _ => {}
-                }
-            }
-        }
-
-        walk(&mut self.stored, assets);
-    }
-}
-
-impl Default for IconResources {
-    fn default() -> Self {
-        let result = include_dir!("resources/icons").entries().iter().filter_map(|e| match e {
-            DirEntry::File(f) => Some(f),
-            _ => None,
-        }).filter(|p| p.path().to_str().unwrap().ends_with(".svg")).collect::<Vec<_>>();
-
-
-        IconResources {
-            stored: result.iter().map(|p| {
-                let name = p.path().to_str().unwrap().strip_suffix(".svg").unwrap().replace(' ', "_");
-                (name, Arc::new(Assets::load_svg(p.contents())))
-            }).collect(),
-            public: HashMap::default(),
-        }
-    }
-}
-
-impl IconResources {
     pub fn insert<K: Display>(&mut self, key: K, icon: &str) {
         self.public.insert(key.to_string(), self.stored.get(icon).unwrap_or_else(|| {
             self.stored.get("ptsd_error").expect("IconResources corrupted.")
         }).clone());
     }
-
-    pub fn get<K: Display>(&self, key: K) -> Arc<RgbaImage> {
+    pub fn get<K: Display>(&self, key: K) -> Svg {
         self.public.get(&key.to_string()).unwrap_or_else(|| {
             self.stored.get("ptsd_error").expect("IconResources corrupted.")
         }).clone()
+    }
+    fn include(&mut self, assets: &Assets) {
+        for file in assets.files() {
+            if file.path().extension().is_none_or(|ext| ext != "svg") {continue}
+            let path = file.path().to_str().unwrap();
+            let name = path.strip_prefix("icons/").unwrap_or(path)
+                .strip_suffix(".svg").unwrap().replace(' ', "_");
+            self.stored.entry(name).or_insert_with(|| assets.get_svg(path).unwrap());
+        }
+    }
+}
+impl Default for IconResources {
+    fn default() -> Self {
+        let mut resources = Self {stored: HashMap::new(), public: HashMap::new()};
+        resources.include(&Assets::new(vec![include_dir!("resources/icons")]));
+        resources
     }
 }
 
@@ -180,11 +148,11 @@ impl ColorResources {
 
     pub fn light(brand: Color) -> Self {
         let mut colors = ColorResources(HashMap::new());
-        colors.insert(Background::Primary, Color::WHITE);
+        colors.insert(Background::Primary, Color::white());
         colors.insert(Background::Secondary, Color::from_hex("#DDDDDD", 255));
-        colors.insert(Text::Primary, Color::BLACK);
+        colors.insert(Text::Primary, Color::black());
         colors.insert(Text::Secondary, Color::from_hex("#585250", 255));
-        colors.insert(Text::Heading, Color::BLACK);
+        colors.insert(Text::Heading, Color::black());
         colors.insert(Outline::Primary, Color::from_hex("#DDDDDD", 255));
         colors.insert(Outline::Secondary, Color::from_hex("#585250", 255));
         colors.insert(Status::Success, Color::from_hex("#3ccb5a", 255));
@@ -196,12 +164,12 @@ impl ColorResources {
 
     pub fn dark(brand: Color) -> Self {
         let mut colors = ColorResources(HashMap::new());
-        colors.insert(Background::Primary, Color::BLACK);
+        colors.insert(Background::Primary, Color::black());
         colors.insert(Background::Secondary, Color::from_hex("#262322", 255));
-        colors.insert(Text::Primary, Color::WHITE);
+        colors.insert(Text::Primary, Color::white());
         colors.insert(Text::Secondary, Color::from_hex("#a7a29d", 255));
-        colors.insert(Text::Heading, Color::WHITE);
-        colors.insert(Outline::Primary, Color::WHITE);
+        colors.insert(Text::Heading, Color::white());
+        colors.insert(Outline::Primary, Color::white());
         colors.insert(Outline::Secondary, Color::from_hex("#a7a29d", 255));
         colors.insert(Status::Success, Color::from_hex("#3ccb5a", 255));
         colors.insert(Status::Warning, Color::from_hex("#f5bd14", 255));
@@ -211,4 +179,6 @@ impl ColorResources {
     }
 }
 
-impl Default for ColorResources { fn default() -> Self { ColorResources::dark(Color::from_hex("#1ca758", 255)) } }
+impl Default for ColorResources {
+    fn default() -> Self {Self::dark(Color::from_hex("#1ca758", 255))}
+}

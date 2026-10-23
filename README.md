@@ -4,7 +4,7 @@ PTSD is a Rust crate that provides a foundational layer between **Prism** and hi
 
 Rather than acting as a UI framework itself, PTSD supplies common infrastructure that design systems can build upon. This separation allows UI frameworks to remain focused on presentation while delegating behavioral and structural concerns to PTSD.
 
-PTSD is commonly used as the layer directly beneath a design system such as **Pelican UI**, and directly above **Prism**, which provides rendering, layout, and event systems.
+PTSD sits beneath design systems such as **Pelican UI** and above **Prism**. Prism provides drawable and layout traits, drawing instructions, input events, and application interfaces. PTSD supplies the concrete UI layouts, containers, and interactions. Prism is PTSD's only RAMP-stack dependency.
 
 Together these layers form the following structure:
 
@@ -16,8 +16,6 @@ Design System (e.g. Pelican UI)
 PTSD
     ↓
 Prism
-    ↓
-wgpu
 ```
 
 ## Scope
@@ -27,12 +25,87 @@ PTSD provides:
 * Navigation infrastructure
 * Interaction systems
 * Theme resource management
+* Layouts: `Stack`, `Row`, `Column`, and `Wrap`
+* Display containers: `Bin`, `Opt`, `EitherOr`, `Enum`, and `Dismissible`
+* Input emitters and UI events
 
-PTSD intentionally **does not provide UI components or layouts**. Those responsibilities belong to higher-level design systems such as Pelican UI.
+Styled components remain in higher-level design systems such as Pelican UI.
+
+The former Prism helpers now live in `ptsd::layout`, `ptsd::display`, `ptsd::emitters`, and `ptsd::events`. Drawable implementations use Prism's `SizeRange`, `RangeTree`, and `LayoutTree`. Concrete component handlers use `prism::events::OnEvent<E>` with `#[on_event]` above each implementation.
+
+Components use `#[derive(Component)]`. Generic emitters use `#[on_dyn_event]` and define an inherent `on_event` method to receive boxed events directly. `Opt` transfers its child between a visible `Option<D>` and a `#[skip]` hidden `Option<D>`, retaining its state while hidden.
+
+Prism applies window insets before laying out the root component. PTSD interfaces do not add those insets again, and their constructors no longer require a `Context`.
+
+## Mobile keyboards
+
+`Interface::mobile(navigator, body, keyboard)` accepts `Option<Box<dyn Drawable>>` for the
+keyboard. Pass `None` to use the native keyboard or `Some(Box::new(keyboard))` to supply a
+custom keyboard. Construction leaves both hidden. `InputField` requests the keyboard on
+focus through `ShowKeyboard(true)`; `ShowKeyboard(false)` and navigation dismiss it.
+
+The interface retains the native handle while requested and releases it when dismissed,
+including a visible-to-hidden transition in `WindowEvent::Resized`. Resizes before the native
+keyboard appears keep the pending request. Repeated focus requests reuse the handle. Custom
+keyboard visibility continues to emit `CustomKeyboardVisibilityChanged`.
+
+Ramp forwards Maverick's available window size into `prism::Window`, including native keyboard
+animation frames. The mobile interface uses that space directly without another reduction for
+the native keyboard. Custom keyboards remain ordinary children in the mobile column and occupy
+their allocated height. The navigator stays hidden until native keyboard dismissal completes.
+Native visibility is read from `ctx.window.keyboard_visible`, including floating keyboards.
+
+The body receives the remaining layout space. A messaging composer anchored at its bottom
+therefore follows the keyboard. Wrap form content in `emitters::Scrollable` to allow manual
+scrolling. Keep fixed headers, composers, and toolbars outside that scrollable.
+
+### Scrolling
+
+`Scrollable::new(content)` anchors scrolling at the start; `Scrollable::end(content)` anchors
+it at the end. Both respond to scroll gestures and `ScrollTo`, clamping the position to the
+content bounds as the viewport changes. Focusing or editing an input does not reposition the
+scrollable or add extra space around the content.
+
+## Dismissible panels
+
+`display::Dismissible<D>` wraps any drawable and handles dragging, velocity, settling, and
+layout. Use `DismissEdge::Bottom` for a keyboard or bottom sheet, and `DismissEdge::Top` for
+a notification popover that swipes upward. Styling and the action taken after dismissal
+remain with the owner.
+
+The owner calls `observe` once for each event, before routing it to children. Supply the
+panel's resting rectangle in the same coordinate space as the event, or `None` while hidden.
+This parent-level observation allows a drag to start in adjacent content and cross the
+panel's edge. The final argument is the depth of the empty drag-handle strip inside that edge.
+Controls beyond that strip retain their normal touch activation and cannot start a drag.
+
+```rust,ignore
+use prism::drawable::Area;
+use ptsd::display::{Dismissible, DismissEdge};
+
+let mut banner = Dismissible::new(notification, DismissEdge::Top);
+banner.reserve_space(true); // An overlay keeps its layout slot while sliding.
+
+// In the parent's event handler, after layout and before forwarding the event:
+let area = Area {offset: (0.0, 0.0), size: banner.size()};
+if banner.observe(&mut *event, showing.then_some(area), 12.0) {
+    showing = false;
+    // Hide the banner or emit the application's notification-dismissed event.
+}
+```
+
+By default the panel's occupied height shrinks as it moves, allowing neighboring content to
+expand. `reserve_space(true)` keeps that space unchanged. Align bottom panels to the bottom
+of their parent and top panels to the top. The resting rectangle must not move with the drag.
+`observe` neutralizes captured mouse events, preventing child presses or scrolling from
+continuing under the drag, and returns `true` once a completed dismissal has settled.
+Short drags and reversals return to rest. Unpressed wheel input and trailing touch momentum
+do not begin a drag. Call `reset` when replacing, showing, or navigating away from a panel;
+hidden observation, resize, and focus loss also reset it.
 
 ## Interactions
 
-PTSD defines a set of reusable interaction types that sit between Prism’s event emitters and the drawable components that respond to them.
+PTSD defines reusable emitters that translate Prism input events into UI events, and interaction types that update the drawable components in response.
 
 These interaction layers translate raw input events into meaningful UI behaviors.
 
@@ -54,10 +127,16 @@ The theme system is intentionally designed to be highly flexible. While PTSD def
 A theme contains several resource collections:
 
 * **ColorResources** — a collection of colors as `Color`
-* **IconResources** — a collection of icons as `Arc<RgbaImage>`
+* **IconResources** — a collection of validated SVG icons as `prism::drawable::Svg`
 * **FontResources** — a collection of fonts and font sizes
 
 These resources allow UI systems to maintain consistent visual styling across an application.
+
+`Assets::get_image(&hardware, path)` and `get_asset_image(&hardware, name)` return backend raster
+`Image` handles. `get_svg(path)` and `get_asset_svg(name)` return validated `Svg` drawables.
+Each collection retains shared content handles; cloned assets and themes reuse them. Raster pixels
+decode lazily, and display resizing reuses their GPU texture. SVGs rasterize at their physical
+display size. `IconResources` loads SVG files and returns `Svg` values through `get`.
 
 ## Design Goals
 
