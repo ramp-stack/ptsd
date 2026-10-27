@@ -596,10 +596,13 @@ impl Layout for Wrap {
         (width, if self.5.is_empty() {width} else {f32::MAX})
     }
 
-    fn assign_width(&mut self, _width: f32) -> Vec<f32> {
+    fn assign_width(&mut self, width: f32) -> Vec<f32> {
+        let width = (width - self.4.0 - self.4.2).max(0.0);
         self.5.iter_mut().map(|child| {
-            child.max_width = child.min_width;
-            child.min_width
+            let width = width.clamp(child.min_width, child.max_width);
+            child.min_width = width;
+            child.max_width = width;
+            width
         }).collect()
     }
 
