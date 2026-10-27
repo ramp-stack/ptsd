@@ -1,8 +1,9 @@
 use dyn_clone::clone_trait_object;
 use prism::Context;
-use prism::drawable::{Component, Drawable, Instruction, LayoutTree, RangeTree, Rect};
-use prism::events::{ChildEvent, DynEvent, Event, EventHandler, OnEvent, WindowEvent, on_event};
-use prism::hardware::Keyboard;
+use prism::drawable::{Component, Drawable, Instruction, LayoutTree, Rect};
+use prism::events::{
+    ChildEvent, DynEvent, Event, ListenCallback, ListenFuture, OnEvent, WindowEvent, on_event,
+};
 
 use std::any::Any;
 
@@ -10,12 +11,12 @@ use crate::display::Opt;
 use crate::interface::navigation::{NavigationEvent, NavigationChanged, Pages};
 use crate::layout::{Column, Offset, Padding, Row, Size};
 
-#[derive(Debug, Clone)]
-pub struct ShowKeyboard(pub bool);
+#[derive(Debug, Clone, Copy)]
+pub enum ShowKeyboard {Show {dismiss_padding: f32}, Hide}
 
 impl Event for ShowKeyboard {
     fn pass(&self, _ctx: &mut Context, children: &mut [ChildEvent<'_, Self>]) {
-        for child in children {*child.event = Some(self.clone());}
+        for child in children {*child.event = Some(*self);}
     }
 }
 
@@ -33,20 +34,25 @@ pub trait Body: Drawable {
 clone_trait_object!(Body);
 
 impl Drawable for Box<dyn Body> {
-    fn listen(&mut self) -> prism::events::ListenFuture<'_> {(**self).listen()}
-    fn update(&mut self, ctx: &mut Context, path: Vec<usize>, update: Box<dyn Any>) {
-        (**self).update(ctx, path, update);
+    fn name(&self) -> String {Drawable::name(&**self)}
+    fn request_width(&mut self) -> (f32, f32) {Drawable::request_width(&mut **self)}
+    fn request_height(&mut self, width: f32) -> (f32, f32) {
+        Drawable::request_height(&mut **self, width)
     }
-    fn size_range(&self) -> RangeTree {Drawable::size_range(&**self)}
-    fn layout(&mut self, size: (f32, f32), range: &RangeTree) -> LayoutTree {
-        Drawable::layout(&mut **self, size, range)
-    }
+    fn layout(&mut self, size: (f32, f32)) -> LayoutTree {Drawable::layout(&mut **self, size)}
     fn draw(&self, layout: &LayoutTree, offset: (f32, f32), bound: Rect) -> Vec<Instruction> {
         Drawable::draw(&**self, layout, offset, bound)
     }
-    fn name(&self) -> String {Drawable::name(&**self)}
     fn event(&mut self, ctx: &mut Context, layout: &LayoutTree, event: Box<dyn DynEvent>) {
         Drawable::event(&mut **self, ctx, layout, event)
+    }
+    fn changed(&mut self) -> ListenFuture<'_> {
+        Box::pin(async move {
+            let callback = (**self).changed().await;
+            Box::new(move |this: &mut dyn Any, ctx: &mut Context| {
+                callback(this.downcast_mut::<Self>().unwrap().as_mut().as_any_mut(), ctx);
+            }) as ListenCallback
+        })
     }
 }
 
@@ -54,32 +60,35 @@ pub trait Navigator: Drawable {}
 clone_trait_object!(Navigator);
 
 impl Drawable for Box<dyn Navigator> {
-    fn listen(&mut self) -> prism::events::ListenFuture<'_> {(**self).listen()}
-    fn update(&mut self, ctx: &mut Context, path: Vec<usize>, update: Box<dyn Any>) {
-        (**self).update(ctx, path, update);
+    fn name(&self) -> String {Drawable::name(&**self)}
+    fn request_width(&mut self) -> (f32, f32) {Drawable::request_width(&mut **self)}
+    fn request_height(&mut self, width: f32) -> (f32, f32) {
+        Drawable::request_height(&mut **self, width)
     }
-    fn size_range(&self) -> RangeTree {Drawable::size_range(&**self)}
-    fn layout(&mut self, size: (f32, f32), range: &RangeTree) -> LayoutTree {
-        Drawable::layout(&mut **self, size, range)
-    }
+    fn layout(&mut self, size: (f32, f32)) -> LayoutTree {Drawable::layout(&mut **self, size)}
     fn draw(&self, layout: &LayoutTree, offset: (f32, f32), bound: Rect) -> Vec<Instruction> {
         Drawable::draw(&**self, layout, offset, bound)
     }
-    fn name(&self) -> String {Drawable::name(&**self)}
     fn event(&mut self, ctx: &mut Context, layout: &LayoutTree, event: Box<dyn DynEvent>) {
         Drawable::event(&mut **self, ctx, layout, event)
+    }
+    fn changed(&mut self) -> ListenFuture<'_> {
+        Box::pin(async move {
+            let callback = (**self).changed().await;
+            Box::new(move |this: &mut dyn Any, ctx: &mut Context| {
+                callback(this.downcast_mut::<Self>().unwrap().as_mut().as_any_mut(), ctx);
+            }) as ListenCallback
+        })
     }
 }
 
 #[derive(Component, Clone, Debug)]
-#[on_dyn_event]
 pub enum Interface {
     Mobile {
         layout: Column,
         body: Box<dyn Body>,
         navigator: Option<Opt<Box<dyn Navigator>>>,
         keyboard: Option<Opt<Box<dyn Drawable>>>,
-        #[skip] native_keyboard: Option<(Keyboard, bool)>,
     },
     Desktop {
         layout: Row,
@@ -101,14 +110,14 @@ impl Interface {
         }
     }
 
-    /// Uses the supplied custom keyboard, or opens the native keyboard on `ShowKeyboard(true)`.
+    /// Uses the supplied custom keyboard, or shows and hides the shared native keyboard handle.
+    /// Hardware owns the handle; visibility changes preserve the focused input.
     pub fn mobile(navigator: Option<Box<dyn Navigator>>, mut body: impl Body, keyboard: Option<Box<dyn Drawable>>) -> Self {
         let root = body.pages().is_root();
         Interface::Mobile {
             layout: Column::center(0.0),
             body: Box::new(body), keyboard: keyboard.map(|keyboard| Opt::new(keyboard, false)),
             navigator: navigator.map(|n| Opt::new(n, root)),
-            native_keyboard: None,
         }
     }
 
@@ -127,37 +136,27 @@ impl Interface {
         }
     }
 
-    fn show_keyboard(&mut self, ctx: &mut Context, showing: bool) {
-        if let Interface::Mobile {keyboard, native_keyboard, ..} = self {
+    fn show_keyboard(&mut self, ctx: &mut Context, event: ShowKeyboard) {
+        let showing = matches!(event, ShowKeyboard::Show {..});
+        if let Interface::Mobile {keyboard, ..} = self {
             if let Some(keyboard) = keyboard {
                 if keyboard.is_showing() != showing {
                     keyboard.display(showing);
                     ctx.emit(CustomKeyboardVisibilityChanged(showing));
                 }
-            } else if showing {
-                if native_keyboard.is_none() {
-                    *native_keyboard = Some((ctx.hardware.open_keyboard(), ctx.window.keyboard_visible));
-                }
-            } else {
-                *native_keyboard = None;
-            }
+            } else if let ShowKeyboard::Show {dismiss_padding} = event {
+                ctx.hardware.keyboard().show(dismiss_padding);
+            } else {ctx.hardware.keyboard().hide();}
         }
         self.refresh_navigator(ctx);
     }
 
     fn refresh_navigator(&mut self, ctx: &Context) {
-        if let Interface::Mobile {
-            keyboard, native_keyboard, body, navigator: Some(navigator), ..
-        } = self {
+        if let Interface::Mobile {keyboard, body, navigator: Some(navigator), ..} = self {
             let showing = keyboard.as_ref().is_some_and(Opt::is_showing)
-                || native_keyboard.is_some() || ctx.window.keyboard_visible;
+                || ctx.hardware.keyboard().visible();
             navigator.display(!showing && body.pages().is_root());
         }
-    }
-
-    fn on_event(&mut self, ctx: &mut Context, event: Box<dyn DynEvent>) -> Vec<Box<dyn DynEvent>> {
-        self.refresh_navigator(ctx);
-        EventHandler::dispatch(self, ctx, event)
     }
 
     pub fn navigator(&mut self) -> &mut Option<Opt<Box<dyn Navigator>>> {
@@ -170,9 +169,17 @@ impl Interface {
 }
 
 #[on_event]
+impl OnEvent<WindowEvent> for Interface {
+    fn on(&mut self, ctx: &mut Context, event: WindowEvent) -> Vec<Box<dyn DynEvent>> {
+        if matches!(event, WindowEvent::Resized(_)) {self.refresh_navigator(ctx);}
+        prism::events![event]
+    }
+}
+
+#[on_event]
 impl OnEvent<NavigationEvent> for Interface {
     fn on(&mut self, ctx: &mut Context, mut event: NavigationEvent) -> Vec<Box<dyn DynEvent>> {
-        self.show_keyboard(ctx, false);
+        self.show_keyboard(ctx, ShowKeyboard::Hide);
         if let NavigationEvent::Push(_, excluded) = &mut event {
             *excluded = match self {
                 Interface::Desktop {navigator: Some(_), ..}
@@ -187,7 +194,7 @@ impl OnEvent<NavigationEvent> for Interface {
 #[on_event]
 impl OnEvent<ShowKeyboard> for Interface {
     fn on(&mut self, ctx: &mut Context, event: ShowKeyboard) -> Vec<Box<dyn DynEvent>> {
-        self.show_keyboard(ctx, event.0);
+        self.show_keyboard(ctx, event);
         prism::events![event]
     }
 }
@@ -195,21 +202,6 @@ impl OnEvent<ShowKeyboard> for Interface {
 #[on_event]
 impl OnEvent<NavigationChanged> for Interface {
     fn on(&mut self, ctx: &mut Context, event: NavigationChanged) -> Vec<Box<dyn DynEvent>> {
-        self.refresh_navigator(ctx);
-        prism::events![event]
-    }
-}
-
-#[on_event]
-impl OnEvent<WindowEvent> for Interface {
-    fn on(&mut self, ctx: &mut Context, event: WindowEvent) -> Vec<Box<dyn DynEvent>> {
-        if let WindowEvent::Resized(window) = &event
-            && let Interface::Mobile {native_keyboard, ..} = self
-            && let Some((_, visible)) = native_keyboard {
-            // Resizes before the keyboard appears must not cancel the pending request.
-            if *visible && !window.keyboard_visible {*native_keyboard = None;}
-            else {*visible = window.keyboard_visible;}
-        }
         self.refresh_navigator(ctx);
         prism::events![event]
     }

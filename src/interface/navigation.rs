@@ -1,7 +1,7 @@
 use dyn_clone::clone_trait_object;
 use prism::Context;
-use prism::drawable::{Component, Drawable, Instruction, LayoutTree, RangeTree, Rect};
-use prism::events::{ListenFuture, ChildEvent, DynEvent, Event, OnEvent, on_event};
+use prism::drawable::{Component, Drawable, Instruction, LayoutTree, Rect};
+use prism::events::{ListenCallback, ListenFuture, ChildEvent, DynEvent, Event, OnEvent, on_event};
 
 use std::any::Any;
 
@@ -62,20 +62,25 @@ pub trait FlowContainer: Drawable {
 clone_trait_object!(FlowContainer);
 
 impl Drawable for Box<dyn FlowContainer> {
-    fn listen(&mut self) -> ListenFuture<'_> {(**self).listen()}
-    fn update(&mut self, ctx: &mut Context, path: Vec<usize>, update: Box<dyn Any>) {
-        (**self).update(ctx, path, update);
+    fn name(&self) -> String {Drawable::name(&**self)}
+    fn request_width(&mut self) -> (f32, f32) {Drawable::request_width(&mut **self)}
+    fn request_height(&mut self, width: f32) -> (f32, f32) {
+        Drawable::request_height(&mut **self, width)
     }
-    fn size_range(&self) -> RangeTree {Drawable::size_range(&**self)}
-    fn layout(&mut self, size: (f32, f32), range: &RangeTree) -> LayoutTree {
-        Drawable::layout(&mut **self, size, range)
-    }
+    fn layout(&mut self, size: (f32, f32)) -> LayoutTree {Drawable::layout(&mut **self, size)}
     fn draw(&self, layout: &LayoutTree, offset: (f32, f32), bound: Rect) -> Vec<Instruction> {
         Drawable::draw(&**self, layout, offset, bound)
     }
-    fn name(&self) -> String {Drawable::name(&**self)}
     fn event(&mut self, ctx: &mut Context, layout: &LayoutTree, event: Box<dyn DynEvent>) {
         Drawable::event(&mut **self, ctx, layout, event)
+    }
+    fn changed(&mut self) -> ListenFuture<'_> {
+        Box::pin(async move {
+            let callback = (**self).changed().await;
+            Box::new(move |this: &mut dyn Any, ctx: &mut Context| {
+                callback(this.downcast_mut::<Self>().unwrap().as_mut().as_any_mut(), ctx);
+            }) as ListenCallback
+        })
     }
 }
 
@@ -84,20 +89,25 @@ downcast_rs::impl_downcast!(AppPage);
 clone_trait_object!(AppPage);
 
 impl Drawable for Box<dyn AppPage> {
-    fn listen(&mut self) -> ListenFuture<'_> {(**self).listen()}
-    fn update(&mut self, ctx: &mut Context, path: Vec<usize>, update: Box<dyn Any>) {
-        (**self).update(ctx, path, update);
+    fn name(&self) -> String {Drawable::name(&**self)}
+    fn request_width(&mut self) -> (f32, f32) {Drawable::request_width(&mut **self)}
+    fn request_height(&mut self, width: f32) -> (f32, f32) {
+        Drawable::request_height(&mut **self, width)
     }
-    fn size_range(&self) -> RangeTree {Drawable::size_range(&**self)}
-    fn layout(&mut self, size: (f32, f32), range: &RangeTree) -> LayoutTree {
-        Drawable::layout(&mut **self, size, range)
-    }
+    fn layout(&mut self, size: (f32, f32)) -> LayoutTree {Drawable::layout(&mut **self, size)}
     fn draw(&self, layout: &LayoutTree, offset: (f32, f32), bound: Rect) -> Vec<Instruction> {
         Drawable::draw(&**self, layout, offset, bound)
     }
-    fn name(&self) -> String {Drawable::name(&**self)}
     fn event(&mut self, ctx: &mut Context, layout: &LayoutTree, event: Box<dyn DynEvent>) {
         Drawable::event(&mut **self, ctx, layout, event)
+    }
+    fn changed(&mut self) -> ListenFuture<'_> {
+        Box::pin(async move {
+            let callback = (**self).changed().await;
+            Box::new(move |this: &mut dyn Any, ctx: &mut Context| {
+                callback(this.downcast_mut::<Self>().unwrap().as_mut().as_any_mut(), ctx);
+            }) as ListenCallback
+        })
     }
 }
 

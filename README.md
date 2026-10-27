@@ -39,9 +39,17 @@ PTSD provides:
 
 Styled components remain in higher-level design systems such as Pelican UI.
 
-The former Prism helpers now live in `ptsd::layout`, `ptsd::display`, `ptsd::emitters`, and `ptsd::events`. Drawable implementations use Prism's `SizeRange`, `RangeTree`, and `LayoutTree`. Concrete component handlers use `prism::events::OnEvent<E>` with `#[on_event]` above each implementation.
+The former Prism helpers now live in `ptsd::layout`, `ptsd::display`, `ptsd::emitters`, and
+`ptsd::events`. Drawable implementations use mutable `request_width()`, `request_height(width)`,
+and `layout(size)` methods. Requests return `(minimum, maximum)`; layouts retain their direct
+children's measurements and final placement produces a `LayoutTree`. Construct stacks with
+`Stack::new(...)` or the named convenience constructors. Concrete component handlers use
+`prism::events::OnEvent<E>` with `#[on_event]` above each implementation.
 
-Components use `#[derive(Component)]`. Generic emitters use `#[on_dyn_event]` and define an inherent `on_event` method to receive boxed events directly. `Opt` transfers its child between a visible `Option<D>` and a `#[skip]` hidden `Option<D>`, retaining its state while hidden.
+Components use `#[derive(Component)]`. Generic emitters list their event types in `#[events(...)]`
+above the component and use `#[on_event]` on each typed implementation. Concrete handlers need no
+event list. `Opt` transfers its child between a visible `Option<D>` and a `#[skip]` hidden `Option<D>`,
+retaining its state while hidden.
 
 Prism applies window insets before laying out the root component. PTSD interfaces do not add those insets again, and their constructors no longer require a `Context`.
 
@@ -49,19 +57,28 @@ Prism applies window insets before laying out the root component. PTSD interface
 
 `Interface::mobile(navigator, body, keyboard)` accepts `Option<Box<dyn Drawable>>` for the
 keyboard. Pass `None` to use the native keyboard or `Some(Box::new(keyboard))` to supply a
-custom keyboard. Construction leaves both hidden. `InputField` requests the keyboard on
-focus through `ShowKeyboard(true)`; `ShowKeyboard(false)` and navigation dismiss it.
+custom keyboard. Construction does not request keyboard presentation. `InputField` requests it on
+focus through `ShowKeyboard::Show {dismiss_padding}`; `ShowKeyboard::Hide` and navigation dismiss it.
+`InputField::keyboard_dismiss_padding` configures that distance in logical pixels, defaulting to zero.
+On iOS it extends the native swipe-dismiss region above the keyboard to cover an app toolbar.
 
-The interface retains the native handle while requested and releases it when dismissed,
-including a visible-to-hidden transition in `WindowEvent::Resized`. Resizes before the native
-keyboard appears keep the pending request. Repeated focus requests reuse the handle. Custom
-keyboard visibility continues to emit `CustomKeyboardVisibilityChanged`.
+Hardware owns one shared native keyboard handle. `ctx.hardware.keyboard()` clones that handle
+without opening the keyboard; `show(dismiss_padding)` and `hide()` control its presentation.
+The interface calls those methods on focus, explicit hide, and navigation. Visibility changes
+preserve input focus, and repeated focus requests can reopen the keyboard after a swipe dismissal.
+Custom keyboard visibility continues to emit `CustomKeyboardVisibilityChanged`.
 
 Ramp forwards Maverick's available window size into `prism::Window`, including native keyboard
 animation frames. The mobile interface uses that space directly without another reduction for
 the native keyboard. Custom keyboards remain ordinary children in the mobile column and occupy
-their allocated height. The navigator stays hidden until native keyboard dismissal completes.
-Native visibility is read from `ctx.window.keyboard_visible`, including floating keyboards.
+their allocated height. The navigator is hidden while a custom or native keyboard is visible.
+Native visibility is read from `ctx.hardware.keyboard().visible()`, including floating keyboards.
+It remains true during opening, closing, and partial swipe dismissal while any part of the keyboard
+is visible, and becomes false only when the native keyboard is fully hidden.
+The interface refreshes navigator visibility through typed `WindowEvent::Resized`,
+`ShowKeyboard`, and navigation handlers. Native visibility changes also emit `Resized` when window
+dimensions stay unchanged. Window updates reach the context before those handlers run, and the
+interface forwards their events to its children.
 
 The body receives the remaining layout space. A messaging composer anchored at its bottom
 therefore follows the keyboard. Wrap form content in `emitters::Scrollable` to allow manual
@@ -74,6 +91,29 @@ it at the end. Both respond to scroll gestures and `ScrollTo`, clamping the posi
 content bounds as the viewport changes. Focusing or editing an input does not reposition the
 scrollable or add extra space around the content.
 
+On windows marked `ctx.window.is_mobile`, scrollables replace a left-button press with
+`events::Press::Pending {id, position}`. A stationary press requests a commit after 150
+milliseconds; a quick release requests a commit before the release is forwarded. Moving more
+than 12 logical pixels before a control claims the press cancels it and begins scrolling.
+A commit over unused space has no claimant, so holding there still allows a later drag to
+scroll. This uses the window's mobile flag, not a per-event touch-device classification.
+
+Built-in buttons, selectable controls, sliders, and input emitters understand `Press`.
+Custom controls inside a scrollable should handle `Pending`, `Commit(id)`, and `Cancel(id)`:
+retain the pending identity and local position, perform the action only on a matching commit,
+emit `Press::Claim(id)` through `ctx.emit` when accepting that commit, and clear pending/held
+state on cancellation. The reusable `emitters::Press` helper captures a pending press and
+accepts its commit at most once. Only `Claim` reserves the gesture for a control. Pending
+events follow pointer hit testing; commit and cancel events reach descendants so a control
+can match its captured identity even after layout moves. Controls needing immediate drag
+ownership, such as sliders, can accept their captured press during `Pending`, emit `Claim`,
+and begin their drag immediately. Keep raw mouse handling for use outside a scrollable and
+for desktop input.
+
+Native text focus and selection do not participate in this arbitration. Native text adapters
+currently forward an immediate press/release pair, so gestures starting over native text may
+commit before the physical release. The protocol does not defer native editor behavior.
+
 ## Dismissible panels
 
 `display::Dismissible<D>` wraps any drawable and handles dragging, velocity, settling, and
@@ -82,7 +122,8 @@ a notification popover that swipes upward. Styling and the action taken after di
 remain with the owner.
 
 The owner calls `observe` once for each event, before routing it to children. Supply the
-panel's resting rectangle in the same coordinate space as the event, or `None` while hidden.
+panel's resting rectangle in the same stable coordinate space as the event, or `None` while hidden.
+Convert moving local event coordinates to window coordinates before observing them.
 Drags start within a 12-pixel strip at the panel's content-facing edge: the top of a bottom
 panel, or the bottom of a top panel. The optional final argument adds a handle rectangle,
 such as an adjacent toolbar, in the same coordinate space. Gestures starting elsewhere stay
@@ -92,7 +133,7 @@ gesture, with the threshold subtracted from its offset so the panel starts movin
 Buttons inside a handle should activate on release so a drag can cancel their pending action.
 
 ```rust,ignore
-use prism::drawable::{Area, Drawable};
+use prism::drawable::{Area, Component};
 use ptsd::display::{Dismissible, DismissEdge};
 
 let mut banner = Dismissible::new(notification, DismissEdge::Top);
@@ -102,8 +143,9 @@ banner.reserve_space(true); // An overlay keeps its layout slot while sliding.
 let area = Area {offset: (0.0, 0.0), size: banner.size()};
 banner.observe(&mut *event, showing.then_some(area), None);
 
-// In the owner's update method, after selecting the banner's listener:
-Drawable::update(&mut banner, ctx, path, update);
+// The owner's listener awaits the banner, then runs its callback before advancing:
+let callback = Component::listen(&mut banner).await;
+callback(&mut banner, ctx);
 if banner.advance() {
     showing = false;
     // Hide the banner or emit the application's notification-dismissed event.
@@ -112,13 +154,22 @@ if banner.advance() {
 
 By default the panel's occupied height shrinks as it moves, allowing neighboring content to
 expand. `reserve_space(true)` keeps that space unchanged. Align bottom panels to the bottom
-of their parent and top panels to the top. The resting rectangle must not move with the drag.
+of their parent and top panels to the top. The resting rectangle excludes the panel's own drag
+offset, but follows parent layout changes. Resizing preserves the drag and recomputes its offset
+from the last pointer position, so parent movement is not added to finger movement a second time.
 `observe` neutralizes captured mouse events, cancelling child input during a drag. The owner
-includes the panel in its `listen` selection, forwards its winning `update`, then calls `advance`.
+includes the panel in its `listen` selection, runs the winning callback, then calls `advance`.
 `advance` returns `true` once dismissal finishes and explicitly renews its timer while settling.
 Short drags and reversals return to rest. Unpressed wheel input and trailing touch momentum
 do not begin a drag. Call `reset` when replacing, showing, or navigating away from a panel;
-hidden observation, resize, and focus loss also reset it.
+hidden observation and focus loss also reset it. `is_dismissing` includes a possible drag, an
+active drag, and settling, so the owner can retain the panel until its gesture completes.
+
+Call `dismiss` to animate the remaining distance without a drag. It preserves an active or
+possible gesture and repeated calls do not restart an existing dismissal. While the resting
+edge moves in either direction, settling pauses and follows that edge. A 32-millisecond quiet
+interval leaves room for the next resize frame before the panel resumes its own 0.22-second
+slide. This follows observed layout movement without assuming a platform animation duration.
 
 ## Interactions
 

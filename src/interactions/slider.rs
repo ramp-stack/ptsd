@@ -1,14 +1,16 @@
 use prism::Context;
-use prism::drawable::{Area, Component, Drawable, Instruction, Layout, LayoutTree, RangeTree, Rect};
-use prism::events::{ChangeHandler, ListenFuture, ChildEvent, DynEvent};
+use prism::drawable::{Component, Drawable};
+use prism::events::{DynEvent, OnEvent, on_event};
 
-use std::any::Any;
+use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
 
 use crate::display::Bin;
 use crate::emitters;
 use crate::events as event;
-use crate::layout::{Offset, Padding, Size, Stack};
+use crate::layout::{Offset, Padding, Size, Slider as SliderLayout, Stack};
+
+type SliderClosure = Arc<Mutex<dyn FnMut(&mut Context, f32) + Send + Sync + 'static>>;
 
 #[derive(Component, Clone, Debug)]
 pub struct Slider(Stack, emitters::Slider<_Slider>);
@@ -22,130 +24,71 @@ impl Slider {
     }
 }
 
-impl std::ops::Deref for Slider {
+impl Deref for Slider {
     type Target = _Slider;
     fn deref(&self) -> &Self::Target {&self.1.1}
 }
 
-impl std::ops::DerefMut for Slider {
+impl DerefMut for Slider {
     fn deref_mut(&mut self) -> &mut Self::Target {&mut self.1.1}
 }
 
 /// The editable slider content exposed by `Slider` through `Deref`.
 /// Cloned sliders share their callback; each clone retains its own value and visual children.
-#[derive(Clone)]
+#[derive(Component, Clone)]
 pub struct _Slider {
-    layout: Stack,
+    layout: SliderLayout,
     pub background: Bin<Stack, Box<dyn Drawable>>,
     pub foreground: Bin<Stack, Box<dyn Drawable>>,
     pub handle: Bin<Stack, Box<dyn Drawable>>,
-    pub value: f32,
-    closure: SliderClosure,
+    #[skip] closure: SliderClosure,
 }
 impl _Slider {
     pub fn new(
-        start: f32, background: impl Drawable, foreground: impl Drawable, handle: impl Drawable,
+        start: f32, background: impl Drawable, foreground: impl Drawable, mut handle: impl Drawable,
         callback: impl FnMut(&mut Context, f32) + Send + Sync + 'static,
     ) -> Self {
-        let min = handle.size_range().0.min_width;
+        let min = handle.request_width().0;
         let width = Size::custom(move |widths: Vec<(f32, f32)>| (widths[0].0.min(min), f32::MAX));
-        let b_layout = Stack(
+        let b_layout = Stack::new(
             Offset::Start, Offset::Center, width, Size::Static(6.0), Padding::default(),
         );
-        let f_layout = Stack(
+        let f_layout = Stack::new(
             Offset::Start, Offset::Start, Size::custom(|_| (0.0, f32::MAX)),
             Size::Static(6.0), Padding::default(),
         );
-        let k_layout = Stack(Offset::Start, Offset::Start, Size::Fill, Size::Fit, Padding::default());
-        let layout = Stack(Offset::Start, Offset::Center, Size::Fit, Size::Fit, Padding::default());
+        let k_layout = Stack::new(
+            Offset::Start, Offset::Start, Size::Fill, Size::Fit, Padding::default(),
+        );
         Self {
-            layout, background: Bin(b_layout, Box::new(background)),
+            layout: SliderLayout::new(start, Size::Fit),
+            background: Bin(b_layout, Box::new(background)),
             foreground: Bin(f_layout, Box::new(foreground)), handle: Bin(k_layout, Box::new(handle)),
-            value: start, closure: Arc::new(Mutex::new(callback)),
+            closure: Arc::new(Mutex::new(callback)),
         }
     }
 }
 
-impl Drawable for _Slider {
-    fn listen(&mut self) -> ListenFuture<'_> {
-        Box::pin(ChangeHandler::select(vec![
-            Drawable::listen(&mut self.background), Drawable::listen(&mut self.foreground),
-            Drawable::listen(&mut self.handle),
-        ]))
-    }
-    fn update(&mut self, ctx: &mut Context, mut path: Vec<usize>, update: Box<dyn Any>) {
-        let children: [&mut dyn Drawable; 3] = [
-            &mut self.background, &mut self.foreground, &mut self.handle,
-        ];
-        children[path.pop().unwrap()].update(ctx, path, update);
-    }
-    fn size_range(&self) -> RangeTree {
-        let requests = vec![
-            self.background.size_range(), self.foreground.size_range(), self.handle.size_range(),
-        ];
-        let range = self.layout.size_range(requests.iter().map(|request| request.0).collect());
-        RangeTree(range, requests)
-    }
+impl Deref for _Slider {
+    type Target = SliderLayout;
+    fn deref(&self) -> &Self::Target {&self.layout}
+}
 
-    fn layout(&mut self, size: (f32, f32), request: &RangeTree) -> LayoutTree {
-        let size = request.0.clamp(size);
-        let handle_size = request.1[2].1[0].0.min_width / 2.0;
-        let clamped_x = (size.0 * self.value).clamp(0.0, size.0);
-        let end = (size.0 - handle_size * 2.0).max(0.0);
-        self.handle.get_layout().0 = Offset::Static((clamped_x - handle_size).clamp(0.0, end));
-        let mut areas = self.layout.layout(size, request.1.iter().map(|request| request.0).collect());
-        areas[1].size.0 = clamped_x;
-        let children: [&mut dyn Drawable; 3] = [
-            &mut self.background, &mut self.foreground, &mut self.handle,
-        ];
-        LayoutTree(size, areas.into_iter().zip(children).zip(&request.1)
-            .map(|((area, child), request)| (area.offset, child.layout(area.size, request)))
-            .collect())
-    }
-
-    fn draw(&self, layout: &LayoutTree, offset: (f32, f32), bound: Rect) -> Vec<Instruction> {
-        let children: [&dyn Drawable; 3] = [&self.background, &self.foreground, &self.handle];
-        layout.1.iter().zip(children).flat_map(|((child_offset, branch), child)| {
-            let offset = (offset.0 + child_offset.0, offset.1 + child_offset.1);
-            let left = bound.0.max(offset.0);
-            let top = bound.1.max(offset.1);
-            let bound = (
-                left, top, (bound.0 + bound.2).min(offset.0 + branch.0.0) - left,
-                (bound.1 + bound.3).min(offset.1 + branch.0.1) - top,
-            );
-            if bound.2 > 0.0 && bound.3 > 0.0 {child.draw(branch, offset, bound)} else {vec![]}
-        }).collect()
-    }
-
-    fn event(&mut self, ctx: &mut Context, layout: &LayoutTree, incoming: Box<dyn DynEvent>) {
-        if let Some(slider) = incoming.downcast_ref::<event::Slider>() {
-            match slider {
-                event::Slider::Moved(x) => self.value = ((*x / layout.0.0) * 100.0).round() / 100.0,
-                event::Slider::Start(x) => {
-                    self.value = ((*x / layout.0.0) * 100.0).round() / 100.0;
-                    ctx.hardware.trigger_haptic();
-                }
-            }
-            (self.closure.lock().unwrap())(ctx, self.value);
-        }
-
-        let areas: Vec<_> = layout.1.iter()
-            .map(|(offset, branch)| Area {offset: *offset, size: branch.0}).collect();
-        let mut events: Vec<Option<Box<dyn DynEvent>>> = areas.iter().map(|_| None).collect();
-        let mut slots: Vec<_> = areas.iter().zip(&mut events)
-            .map(|(area, event)| ChildEvent {area, event}).collect();
-        incoming.pass_dyn(ctx, &mut slots);
-        let children: [&mut dyn Drawable; 3] = [
-            &mut self.background, &mut self.foreground, &mut self.handle,
-        ];
-        for ((event, child), (_, branch)) in events.into_iter().zip(children).zip(&layout.1) {
-            if let Some(event) = event {child.event(ctx, branch, event);}
-        }
-    }
+impl DerefMut for _Slider {
+    fn deref_mut(&mut self) -> &mut Self::Target {&mut self.layout}
 }
 
 impl std::fmt::Debug for _Slider {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {f.write_str("_Slider")}
 }
 
-type SliderClosure = Arc<Mutex<dyn FnMut(&mut Context, f32) + Send + Sync + 'static>>;
+#[on_event]
+impl OnEvent<event::Slider> for _Slider {
+    fn on(&mut self, ctx: &mut Context, event: event::Slider) -> Vec<Box<dyn DynEvent>> {
+        let (event::Slider::Start(x) | event::Slider::Moved(x)) = event;
+        self.value = (self.layout.position(x) * 100.0).round() / 100.0;
+        if matches!(event, event::Slider::Start(_)) {ctx.hardware.trigger_haptic();}
+        (self.closure.lock().unwrap())(ctx, self.value);
+        prism::events![event]
+    }
+}

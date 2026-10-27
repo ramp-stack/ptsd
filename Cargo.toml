@@ -14,7 +14,7 @@ path = "src/lib.rs"
 uuid = { version = "1.16.0", features = ["v4", "js"] }
 hex = "0.4.3"
 include_dir = "0.7.4"
-prism = {package = "prism2", version = "2.0.0"}
+prism = {package = "prism2", version = "3.0.0"}
 chrono = "0.4.42"
 downcast-rs = "2.0.2"
 dyn-clone = "1.0.20"

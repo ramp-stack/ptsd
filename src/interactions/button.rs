@@ -110,6 +110,9 @@ impl OnEvent<event::Button> for _Button {
     fn on(&mut self, ctx: &mut Context, event: event::Button) -> Vec<Box<dyn DynEvent>> {
         if let event::Button::Disable(disable) = event {
             if self.disableable {self.disable(disable);}
+        } else if let event::Button::Hover(false) = event {
+            self.is_pressed = false;
+            if !self.disabled && !self.feedback.is_active() {self.displays.display("default");}
         } else if !self.disabled && !self.feedback.is_active() {
             match event {
                 event::Button::Hover(true) if !self.is_pressed => {self.displays.display("hover");}
@@ -125,10 +128,6 @@ impl OnEvent<event::Button> for _Button {
                     self.is_pressed = false;
                     self.display("default");
                     if should_trigger {self.callback(ctx);}
-                }
-                event::Button::Hover(false) => {
-                    self.is_pressed = false;
-                    self.displays.display("default");
                 }
                 _ => {}
             }

@@ -1,6 +1,6 @@
 use prism::Context;
 use prism::drawable::{Component, Drawable};
-use prism::events::DynEvent;
+use prism::events::{DynEvent, OnEvent, on_event};
 
 use std::sync::{Arc, Mutex};
 
@@ -8,6 +8,8 @@ use crate::display::Enum;
 use crate::emitters;
 use crate::events as event;
 use crate::layout::Stack;
+
+type ToggleCallback = Arc<Mutex<dyn FnMut(&mut Context, bool) + Send + Sync + 'static>>;
 
 #[derive(Component, Clone, Debug)]
 pub struct Toggle(Stack, emitters::Button<_Toggle>);
@@ -29,8 +31,8 @@ impl std::ops::DerefMut for Toggle {
 
 /// The toggle content exposed by `Toggle` through `Deref`.
 /// Cloned toggles share their callback while retaining independent selection state.
+/// Button events are consumed; other event types continue to the displayed content.
 #[derive(Component, Clone)]
-#[on_dyn_event]
 pub struct _Toggle(Stack, Enum<Box<dyn Drawable>>, #[skip] bool, #[skip] ToggleCallback);
 impl _Toggle {
     pub fn new(on: impl Drawable, off: impl Drawable, is_selected: bool, on_click: impl FnMut(&mut Context, bool) + Send + Sync + 'static) -> Self {
@@ -39,9 +41,12 @@ impl _Toggle {
             ("on".to_string(), Box::new(on)), ("off".to_string(), Box::new(off)),
         ], start.to_string()), !is_selected, Arc::new(Mutex::new(on_click)))
     }
+}
 
-    fn on_event(&mut self, ctx: &mut Context, incoming: Box<dyn DynEvent>) -> Vec<Box<dyn DynEvent>> {
-        if let Some(event::Button::Pressed(true)) = incoming.downcast_ref() {
+#[on_event]
+impl OnEvent<event::Button> for _Toggle {
+    fn on(&mut self, ctx: &mut Context, event: event::Button) -> Vec<Box<dyn DynEvent>> {
+        if let event::Button::Pressed(true) = event {
             self.2 = !self.2;
             ctx.hardware.trigger_haptic();
             (self.3.lock().unwrap())(ctx, !self.2);
@@ -54,5 +59,3 @@ impl _Toggle {
 impl std::fmt::Debug for _Toggle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {f.write_str("_Toggle")}
 }
-
-type ToggleCallback = Arc<Mutex<dyn FnMut(&mut Context, bool) + Send + Sync + 'static>>;

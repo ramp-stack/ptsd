@@ -1,8 +1,5 @@
-use prism::Context;
-use prism::drawable::{Component, Drawable, Drawables, Layout};
-use prism::events::{ChangeHandler, ListenFuture};
+use prism::drawable::{Component, Drawables, Layout};
 
-use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
@@ -29,31 +26,21 @@ impl<L: Layout + Clone + 'static, D: Drawables + Clone + Debug + 'static> DerefM
     fn deref_mut(&mut self) -> &mut D {&mut self.1}
 }
 
-#[derive(Debug, Clone)]
-pub struct Opt<D: Drawables + Clone + Debug + 'static>(Stack, D, bool);
+#[derive(Debug, Component, Clone)]
+pub struct Opt<D: Drawables + Clone + Debug + 'static>(Stack, Option<D>, #[skip] Option<D>);
 
 impl<D: Drawables + Clone + Debug + 'static> Opt<D> {
-    pub fn new(item: D, display: bool) -> Self {Self(Stack::default(), item, display)}
-    pub fn display(&mut self, display: bool) {self.2 = display;}
-    pub fn inner(&mut self) -> &mut D {&mut self.1}
-    pub fn inner_ref(&self) -> &D {&self.1}
-    pub fn is_showing(&self) -> bool {self.2}
-}
-impl<D: Drawables + Clone + Debug + 'static> Component for Opt<D> {
-    fn children(&self) -> Vec<&dyn Drawable> {
-        if self.2 {self.1.drawables()} else {vec![]}
+    pub fn new(item: D, display: bool) -> Self {
+        if display {Self(Stack::default(), Some(item), None)}
+        else {Self(Stack::default(), None, Some(item))}
     }
-    fn children_mut(&mut self) -> Vec<&mut dyn Drawable> {
-        if self.2 {self.1.drawables_mut()} else {vec![]}
+    pub fn display(&mut self, display: bool) {
+        if display == self.is_showing() {return}
+        if display {self.1 = self.2.take();} else {self.2 = self.1.take();}
     }
-    fn layout(&self) -> &dyn Layout {&self.0}
-    fn listen(&mut self) -> ListenFuture<'_> {
-        Box::pin(ChangeHandler::select(self.children_mut().into_iter().map(Drawable::listen).collect()))
-    }
-    fn update(&mut self, ctx: &mut Context, mut path: Vec<usize>, update: Box<dyn Any>) {
-        let index = path.pop().unwrap();
-        self.children_mut()[index].update(ctx, path, update);
-    }
+    pub fn inner(&mut self) -> &mut D {self.1.as_mut().or(self.2.as_mut()).unwrap()}
+    pub fn inner_ref(&self) -> &D {self.1.as_ref().or(self.2.as_ref()).unwrap()}
+    pub fn is_showing(&self) -> bool {self.1.is_some()}
 }
 
 #[derive(Debug, Component, Clone)]
