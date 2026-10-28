@@ -9,6 +9,8 @@ use crate::display::{EitherOr, Enum};
 use crate::layout::{Offset, Padding, Size, Stack};
 use crate::utils::Callback;
 
+type PageContent = EitherOr<Enum<Box<dyn AppPage>>, Option<Box<dyn FlowContainer>>>;
+
 #[derive(Debug, Clone)]
 pub enum NavigationEvent {
     Pop,
@@ -165,7 +167,7 @@ impl OnEvent<NavigationEvent> for History {
 #[derive(Debug, Component, Clone)]
 pub struct Pages {
     layout: Stack,
-    inner: EitherOr<Enum<Box<dyn AppPage>>, Option<Box<dyn FlowContainer>>>,
+    inner: PageContent,
     #[skip] history: History,
 }
 

@@ -18,4 +18,3 @@ prism = {package = "prism2", version = "3.0.0"}
 chrono = "0.4.42"
 downcast-rs = "2.0.2"
 dyn-clone = "1.0.20"
-futures = "0.3.34"

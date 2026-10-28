@@ -11,8 +11,6 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 [[package]]
 name = "air"
 version = "4.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e00a94d4545d2aa90e459645c99efa20166e07bb25b289dc78ad420b7bda0fe"
 dependencies = [
  "chacha20-poly1305",
  "chrono",
@@ -42,12 +40,6 @@ checksum = "ae221649c9976a6f6c56ae1facf410f3ddb33cc661c4b7b61020a912d4237fbc"
 dependencies = [
  "libc",
 ]
-
-[[package]]
-name = "anyanymap"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69df5b85e9be1904c4fc6958cd2da97d85911632535608ccc95c3582b30c59b9"
 
 [[package]]
 name = "arrayref"
@@ -532,7 +524,6 @@ checksum = "9a31d2a3fbaaeb2af2368bbdd904aa8e812d3c04a1ee10d3171f52d556e5d0a3"
 dependencies = [
  "futures-channel",
  "futures-core",
- "futures-executor",
  "futures-io",
  "futures-sink",
  "futures-task",
@@ -556,32 +547,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e"
 
 [[package]]
-name = "futures-executor"
-version = "0.3.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "031b47cf1a3c6cc8bc2fc76cd437f521619387907d469316e7c0bc278f1f5432"
-dependencies = [
- "futures-core",
- "futures-task",
- "futures-util",
-]
-
-[[package]]
 name = "futures-io"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "53c0fa8157de1303bfffdaa1cc2a673bfffb60102f76b0ef4441659124373fed"
-
-[[package]]
-name = "futures-macro"
-version = "0.3.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fb9654ba8355388abeb8dcb4fc62f511300867002afc858860463bdd9fe0c44"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 3.0.9",
-]
 
 [[package]]
 name = "futures-sink"
@@ -610,7 +579,6 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "futures-io",
- "futures-macro",
  "futures-sink",
  "futures-task",
  "memchr",
@@ -1097,8 +1065,6 @@ dependencies = [
 [[package]]
 name = "media2"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c91759f2c54d2e1bebfee0fc1145cd6ba9d74f8cee5ad69cd9cba83f9c00cd1"
 dependencies = [
  "bytemuck",
  "image",
@@ -1273,32 +1239,25 @@ dependencies = [
 
 [[package]]
 name = "prism2"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae66cf25f294e7fdc420a4bdbb78c596f617a62a36dfe220b54dd18614e87975"
+version = "3.0.1"
 dependencies = [
  "air",
- "anyanymap",
  "downcast-rs",
  "dyn-clone",
  "erased-serde",
  "fastrand",
  "futures",
  "futures-timer",
- "include_dir",
  "inventory",
  "media2",
  "prism_proc",
  "serde",
- "uuid",
  "wgpu_prism",
 ]
 
 [[package]]
 name = "prism_proc"
 version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0d781a327710ac640b0f2ca346b6d04989ca1766383c441996302c799f15157"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1321,7 +1280,6 @@ dependencies = [
  "chrono",
  "downcast-rs",
  "dyn-clone",
- "futures",
  "hex",
  "include_dir",
  "prism2",
@@ -2115,8 +2073,6 @@ checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
 [[package]]
 name = "wgpu_prism"
 version = "8.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d684751daaf46d0bec9afba3a3b0742e1e0054ebdefbce6a52818f0af124383"
 dependencies = [
  "fontdue",
  "media2",
