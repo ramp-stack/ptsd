@@ -275,9 +275,8 @@ impl<D: Drawable + Clone> OnEvent<event::Selectable> for TextInput<D> {
 #[on_event]
 impl<D: Drawable + Clone> OnEvent<event::TextInput> for TextInput<D> {
     fn on(&mut self, _ctx: &mut Context, incoming: event::TextInput) -> Vec<Box<dyn DynEvent>> {
-        if let event::TextInput::Focused(focused) = incoming {
-            if let Some(focus) = &mut self.2 {*focus = focused;}
-        }
+        if let event::TextInput::Focused(focused) = incoming
+            && let Some(focus) = &mut self.2 {*focus = focused;}
         prism::events![incoming]
     }
 }

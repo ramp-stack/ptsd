@@ -2,10 +2,10 @@
 
 ## Frontend development setup
 
-Clone `orange`, `chk`, `pelican_ui`, and `ptsd` into sibling directories and update
-their default branches together. Frontend dependencies use these local checkouts;
-backend dependencies use published crates. Follow the
-[Orange setup instructions](https://github.com/ramp-stack/orange#frontend-setup)
+Clone the frontend repository you want to work on. Cargo retrieves frontend dependencies
+from Git and backend dependencies from crates.io; sibling checkouts are optional. Use local
+Cargo overrides when editing multiple crates together, and keep those overrides out of release
+manifests. Follow the [Orange setup instructions](https://github.com/ramp-stack/orange#frontend-setup)
 for Cargo Piston, the shared team identity, and build troubleshooting.
 
 PTSD is a Rust crate that provides a foundational layer between **Prism** and higher-level UI design systems. It is responsible for handling **navigation**, **user interactions**, and **theming**, allowing design systems to focus on defining visual components and layout patterns.

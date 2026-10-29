@@ -19,7 +19,7 @@ impl Button {
         callback: impl FnMut(&mut Context) + Clone + 'static, disableable: bool,
     ) -> Self {
         let button = _Button::new(
-            default, hover, pressed, disabled, feedback, callback, disableable, false,
+            default, hover, pressed, disabled, feedback, callback, disableable,
         );
         Self(Stack::default(), emitters::Button::new(button))
     }
@@ -29,10 +29,9 @@ impl Button {
         disabled: Option<impl Drawable>, feedback: Option<impl Drawable>,
         callback: impl FnMut(&mut Context) + Clone + 'static, disableable: bool,
     ) -> Self {
-        let button = _Button::new(
-            default, hover, pressed, disabled, feedback, callback, disableable, true,
-        );
-        Self(Stack::default(), emitters::Button::new(button))
+        let mut button = Self::new(default, hover, pressed, disabled, feedback, callback, disableable);
+        button.set_trigger_on_release();
+        button
     }
 
     pub fn set_trigger_on_release(&mut self) {self.1.1.triggers_on_release = true;}
@@ -63,8 +62,7 @@ impl _Button {
     pub fn new(
         default: impl Drawable, hover: Option<impl Drawable>, pressed: Option<impl Drawable>,
         disabled: Option<impl Drawable>, feedback: Option<impl Drawable>,
-        callback: impl FnMut(&mut Context) + Clone + 'static,
-        disableable: bool, triggers_on_release: bool,
+        callback: impl FnMut(&mut Context) + Clone + 'static, disableable: bool,
     ) -> Self {
         let mut items: Vec<(String, Box<dyn Drawable>)> = vec![
             ("default".to_string(), Box::new(default)),
@@ -75,7 +73,7 @@ impl _Button {
         if let Some(feedback) = feedback {items.push(("feedback".to_string(), Box::new(feedback)));}
         Self {
             layout: Stack::default(), displays: Enum::new(items, "default".to_string()),
-            disabled: false, on_click: Box::new(callback), disableable, triggers_on_release,
+            disabled: false, on_click: Box::new(callback), disableable, triggers_on_release: false,
             is_pressed: false, feedback: Timer::default(),
         }
     }

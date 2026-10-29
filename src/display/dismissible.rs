@@ -186,7 +186,7 @@ impl<D: Drawable + Clone> Dismissible<D> {
                         }
                     }
                     Drag::Active {origin, anchor, last, velocity} => {
-                        let position = mouse.position.map(|p| p.1).or_else(|| {
+                        let position = mouse.position.map(|p| p.1).or({
                             if let MouseState::Scroll(_, dy) = mouse.state {Some(last.0 - dy)}
                             else {None}
                         });
