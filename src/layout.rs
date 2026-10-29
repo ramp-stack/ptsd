@@ -335,6 +335,10 @@ impl Column {
     pub fn set_scroll(&mut self, val: f32) {
         if let Some(s) = &mut self.4 {**s.lock().as_mut().unwrap() = val;}
     }
+
+    pub fn scroll(&self) -> f32 {
+        self.4.as_ref().map_or(0.0, |scroll| *scroll.lock().unwrap())
+    }
 }
 impl Layout for Column {
     fn request_width(&mut self, children: Vec<(f32, f32)>) -> (f32, f32) {
@@ -596,10 +600,15 @@ impl Layout for Wrap {
         (width, if self.5.is_empty() {width} else {f32::MAX})
     }
 
-    fn assign_width(&mut self, _width: f32) -> Vec<f32> {
+    fn assign_width(&mut self, width: f32) -> Vec<f32> {
+        let available = (width - self.4.0 - self.4.2).max(0.0);
         self.5.iter_mut().map(|child| {
-            child.max_width = child.min_width;
-            child.min_width
+            // Wrap whole items at their preferred width. Their minimum can omit
+            // flexible content such as a button label, leaving only its icon.
+            let width = child.max_width.min(available).max(child.min_width);
+            child.min_width = width;
+            child.max_width = width;
+            width
         }).collect()
     }
 

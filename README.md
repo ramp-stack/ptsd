@@ -64,8 +64,10 @@ On iOS it extends the native swipe-dismiss region above the keyboard to cover an
 
 Hardware owns one shared native keyboard handle. `ctx.hardware.keyboard()` clones that handle
 without opening the keyboard; `show(dismiss_padding)` and `hide()` control its presentation.
-The interface calls those methods on focus, explicit hide, and navigation. Visibility changes
-preserve input focus, and repeated focus requests can reopen the keyboard after a swipe dismissal.
+The interface calls those methods on focus, explicit hide, and navigation. Keyboard visibility
+changes preserve input focus, and repeated focus requests can reopen the keyboard after a swipe
+dismissal. Navigation additionally clears the outgoing page's input focus before switching pages,
+so returning to a stored page preserves its text without restoring its focused state.
 Custom keyboard visibility continues to emit `CustomKeyboardVisibilityChanged`.
 
 Ramp forwards Maverick's available window size into `prism::Window`, including native keyboard

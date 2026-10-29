@@ -350,6 +350,10 @@ impl<D: Drawable + Clone> OnEvent<KeyboardEvent> for TextInput<D> {
 #[events(event::Scrollable, MouseEvent, WindowEvent, event::Press)]
 pub struct Scrollable<D: Drawable + Clone>(Column, pub D, #[skip] DeferredPress);
 impl<D: Drawable + Clone> Scrollable<D> {
+    pub fn scroll(&self) -> f32 {self.0.scroll()}
+    pub fn set_scroll(&mut self, offset: f32) {self.0.set_scroll(offset);}
+    pub fn adjust_scroll(&mut self, delta: f32) {self.0.adjust_scroll(delta);}
+
     pub fn new(child: D) -> Self {
         let layout = Column::new(
             0.0, Offset::Start, Size::Fit, Padding::default(), Some(ScrollAnchor::Start),

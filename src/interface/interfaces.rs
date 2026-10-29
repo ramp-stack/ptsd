@@ -187,7 +187,9 @@ impl OnEvent<NavigationEvent> for Interface {
                 _ => vec![],
             };
         }
-        prism::events![event]
+        // Deliver blur to the outgoing page before navigation stores or replaces it.
+        // Queuing it with ctx.emit would reach the incoming page instead.
+        prism::events![crate::events::TextInput::Focused(false), event]
     }
 }
 
