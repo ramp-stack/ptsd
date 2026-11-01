@@ -24,17 +24,7 @@ impl Button {
         Self(Stack::default(), emitters::Button::new(button))
     }
 
-    pub fn new_triggers_on_release(
-        default: impl Drawable, hover: Option<impl Drawable>, pressed: Option<impl Drawable>,
-        disabled: Option<impl Drawable>, feedback: Option<impl Drawable>,
-        callback: impl FnMut(&mut Context) + Clone + 'static, disableable: bool,
-    ) -> Self {
-        let mut button = Self::new(default, hover, pressed, disabled, feedback, callback, disableable);
-        button.set_trigger_on_release();
-        button
-    }
 
-    pub fn set_trigger_on_release(&mut self) {self.1.1.triggers_on_release = true;}
 }
 
 impl std::ops::Deref for Button {
@@ -54,7 +44,6 @@ pub struct _Button {
     #[skip] disabled: bool,
     #[skip] on_click: Box<dyn Callback>,
     #[skip] disableable: bool,
-    #[skip] triggers_on_release: bool,
     #[skip] is_pressed: bool,
     #[skip] feedback: Timer,
 }
@@ -73,7 +62,7 @@ impl _Button {
         if let Some(feedback) = feedback {items.push(("feedback".to_string(), Box::new(feedback)));}
         Self {
             layout: Stack::default(), displays: Enum::new(items, "default".to_string()),
-            disabled: false, on_click: Box::new(callback), disableable, triggers_on_release: false,
+            disabled: false, on_click: Box::new(callback), disableable,
             is_pressed: false, feedback: Timer::default(),
         }
     }
@@ -116,16 +105,12 @@ impl OnEvent<event::Button> for _Button {
                 event::Button::Hover(true) if !self.is_pressed => {self.displays.display("hover");}
                 event::Button::Pressed(true) => {
                     self.is_pressed = true;
-                    if !self.triggers_on_release {
-                        self.callback(ctx);
-                        self.display("pressed");
-                    }
+                    self.callback(ctx);
+                    self.display("pressed");
                 }
                 event::Button::Pressed(false) => {
-                    let should_trigger = self.is_pressed && self.triggers_on_release;
                     self.is_pressed = false;
-                    self.display("default");
-                    if should_trigger {self.callback(ctx);}
+                    self.displays.display("default");
                 }
                 _ => {}
             }

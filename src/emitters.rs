@@ -2,63 +2,41 @@ use prism::Context;
 use prism::drawable::{Component, Drawable};
 use prism::events::{
     DynEvent, Key, KeyboardEvent, KeyboardState, MouseButton, MouseEvent, MouseState, OnEvent,
-    WindowEvent, OnChange, Timer, on_change, on_event,
+    WindowEvent, on_event,
 };
 use uuid::Uuid;
 
-use std::time::{Duration, Instant};
 
 use crate::events as event;
 use crate::layout::{Column, Offset, Padding, ScrollAnchor, Size, Stack};
 
+/// Buttons react to presses; scroll containers decide when a press is a tap.
 #[derive(Debug, Component, Clone)]
 #[events(MouseEvent, WindowEvent, event::Press)]
-pub struct Button<D: Drawable + Clone>(
-    Stack, pub D, #[skip] Option<PressState>, #[skip] Press,
-);
+pub struct Button<D: Drawable + Clone>(Stack, pub D, #[skip] bool, #[skip] Press);
 impl<D: Drawable + Clone> Button<D> {
-    pub fn new(child: D) -> Self {Self(Stack::default(), child, None, Press::default())}
+    pub fn new(child: D) -> Self {Self(Stack::default(), child, false, Press::default())}
 }
 
 #[on_event]
 impl<D: Drawable + Clone> OnEvent<MouseEvent> for Button<D> {
     fn on(&mut self, ctx: &mut Context, mouse: MouseEvent) -> Vec<Box<dyn DynEvent>> {
-        let mobile = ctx.window.is_mobile;
         match mouse.state {
             MouseState::Pressed(MouseButton::Left) if mouse.position.is_some() => {
                 self.3.clear();
-                let (x, y) = mouse.position.unwrap();
-                self.2 = Some(PressState {
-                    started: Instant::now(), origin: (x as f64, y as f64), cancelled: false,
-                });
+                self.2 = true;
                 return prism::events![event::Button::Pressed(true)];
-            }
-            MouseState::Moved | MouseState::Scroll(..) if mobile && self.2.is_some() => {
-                let press = self.2.as_mut().unwrap();
-                press.cancelled |= match (mouse.state, mouse.position) {
-                    (MouseState::Moved | MouseState::Scroll(..), Some((x, y))) => {
-                        (x as f64 - press.origin.0).powi(2)
-                            + (y as f64 - press.origin.1).powi(2) > 12.0_f64.powi(2)
-                    }
-                    _ => true,
-                };
-            }
-            MouseState::Moved | MouseState::Scroll(..) if !mobile => {
-                return prism::events![event::Button::Hover(mouse.position.is_some())];
             }
             MouseState::Released(MouseButton::Left) => {
                 self.3.clear();
-                let Some(press) = self.2.take() else {return prism::events![mouse]};
-                let valid = press.started.elapsed() <= Duration::from_millis(600)
-                    && !press.cancelled && mouse.position.is_some();
-                return match (mobile, valid, mouse.position.is_some()) {
-                    (true, true, _) => prism::events![event::Button::Pressed(false)],
-                    (true, false, _) => prism::events![event::Button::Hover(false)],
-                    (false, _, true) => prism::events![
-                        event::Button::Pressed(false), event::Button::Hover(true),
-                    ],
-                    _ => prism::events![event::Button::Hover(false)],
-                };
+                let pressed = std::mem::take(&mut self.2);
+                if pressed && mouse.position.is_some() {
+                    return prism::events![event::Button::Pressed(false)];
+                }
+                return prism::events![event::Button::Hover(false)];
+            }
+            MouseState::Moved if !ctx.window.is_mobile => {
+                return prism::events![event::Button::Hover(mouse.position.is_some())];
             }
             _ => {}
         }
@@ -70,7 +48,7 @@ impl<D: Drawable + Clone> OnEvent<MouseEvent> for Button<D> {
 impl<D: Drawable + Clone> OnEvent<WindowEvent> for Button<D> {
     fn on(&mut self, _ctx: &mut Context, incoming: WindowEvent) -> Vec<Box<dyn DynEvent>> {
         if matches!(incoming, WindowEvent::Focused(false)) {
-            self.2 = None;
+            self.2 = false;
             self.3.clear();
             return prism::events![event::Button::Hover(false), incoming];
         }
@@ -80,21 +58,15 @@ impl<D: Drawable + Clone> OnEvent<WindowEvent> for Button<D> {
 
 #[on_event]
 impl<D: Drawable + Clone> OnEvent<event::Press> for Button<D> {
-    fn on(&mut self, ctx: &mut Context, incoming: event::Press) -> Vec<Box<dyn DynEvent>> {
+    fn on(&mut self, _ctx: &mut Context, incoming: event::Press) -> Vec<Box<dyn DynEvent>> {
         match incoming {
             event::Press::Pending {id, position} => {
                 self.3.pending(id, position);
-                self.2 = position.map(|(x, y)| PressState {
-                    started: Instant::now(), origin: (x as f64, y as f64), cancelled: false,
-                });
-                if position.is_some() {return vec![]}
-            }
-            event::Press::Commit(id) if self.3.commit(id).is_some() => {
-                ctx.emit(event::Press::Claim(id));
-                return prism::events![event::Button::Pressed(true)];
+                self.2 = false;
+                if position.is_some() {return vec![];}
             }
             event::Press::Cancel(id) if self.3.cancel(id) => {
-                self.2 = None;
+                self.2 = false;
                 return prism::events![event::Button::Hover(false), incoming];
             }
             _ => {}
@@ -161,13 +133,10 @@ impl<D: Drawable + Clone> OnEvent<MouseEvent> for Selectable<D> {
 
 #[on_event]
 impl<D: Drawable + Clone> OnEvent<event::Press> for Selectable<D> {
-    fn on(&mut self, ctx: &mut Context, incoming: event::Press) -> Vec<Box<dyn DynEvent>> {
+    fn on(&mut self, _ctx: &mut Context, incoming: event::Press) -> Vec<Box<dyn DynEvent>> {
         match incoming {
             event::Press::Pending {id, position} => self.4.pending(id, position),
-            event::Press::Commit(id) => if self.4.commit(id).is_some() {
-                ctx.emit(event::Press::Claim(id));
-                self.select(ctx);
-            },
+            event::Press::Commit(_) => {},
             event::Press::Claim(_) => {}
             event::Press::Cancel(id) => {self.4.cancel(id);}
         }
@@ -308,14 +277,10 @@ impl<D: Drawable + Clone> OnEvent<MouseEvent> for TextInput<D> {
 
 #[on_event]
 impl<D: Drawable + Clone> OnEvent<event::Press> for TextInput<D> {
-    fn on(&mut self, ctx: &mut Context, incoming: event::Press) -> Vec<Box<dyn DynEvent>> {
+    fn on(&mut self, _ctx: &mut Context, incoming: event::Press) -> Vec<Box<dyn DynEvent>> {
         match incoming {
             event::Press::Pending {id, position} => self.3.pending(id, position),
-            event::Press::Commit(id) => if self.3.commit(id).is_some() {
-                ctx.emit(event::Press::Claim(id));
-                if let Some(focus) = &mut self.2 {*focus = true;}
-                return prism::events![event::TextInput::Focused(true), incoming];
-            },
+            event::Press::Commit(_) => {},
             event::Press::Claim(_) => {}
             event::Press::Cancel(id) => {self.3.cancel(id);}
         }
@@ -380,7 +345,7 @@ impl<D: Drawable + Clone> OnEvent<event::Scrollable> for Scrollable<D> {
 #[on_event]
 impl<D: Drawable + Clone> OnEvent<MouseEvent> for Scrollable<D> {
     fn on(&mut self, ctx: &mut Context, incoming: MouseEvent) -> Vec<Box<dyn DynEvent>> {
-        let events = self.2.mouse(ctx.window.is_mobile, incoming);
+        let mut events = self.2.mouse(ctx.window.is_mobile, incoming);
         for incoming in &events {
             if let Some(event::Press::Cancel(id)) = incoming.downcast_ref() {
                 ctx.emit(event::Press::Cancel(*id));
@@ -391,6 +356,8 @@ impl<D: Drawable + Clone> OnEvent<MouseEvent> for Scrollable<D> {
                 if let Some(MouseEvent {state: MouseState::Scroll(_, y), position: Some(_)}) =
                     incoming.downcast_ref() {self.0.adjust_scroll(*y);}
             }
+            events.retain(|event| !matches!(event.downcast_ref::<MouseEvent>(),
+                Some(MouseEvent {state: MouseState::Scroll(..), ..})));
         }
         events
     }
@@ -413,11 +380,6 @@ impl<D: Drawable + Clone> OnEvent<WindowEvent> for Scrollable<D> {
         events.push(Box::new(incoming));
         events
     }
-}
-
-#[on_change(self.2.next())]
-impl<D: Drawable + Clone> OnChange<event::Press> for Scrollable<D> {
-    fn on_change(&mut self, ctx: &mut Context, incoming: event::Press) {ctx.emit(incoming);}
 }
 
 #[derive(Debug, Default, Clone)]
@@ -446,81 +408,116 @@ impl Press {
     pub fn clear(&mut self) {self.captured = None;}
 }
 
+/// Gesture arbitration shared by vertical lists and horizontal media pickers.
+/// No timeout can prove a tap: an unclaimed gesture commits only when it ends.
 #[derive(Debug, Default, Clone)]
 pub struct DeferredPress {
-    timer: Timer,
     target: Option<(Uuid, bool)>,
-    gesture: Option<((f32, f32), (f32, f32))>,
+    gesture: Option<Gesture>,
+    confirmed: bool,
+}
+
+#[derive(Debug, Clone)]
+struct Gesture {
+    origin: (f32, f32),
+    travel: (f32, f32),
+    scroll: (f32, f32),
 }
 
 impl DeferredPress {
+    const TAP_SLOP: f32 = 6.0;
+
     pub fn mouse(&mut self, mobile: bool, mut mouse: MouseEvent) -> Vec<Box<dyn DynEvent>> {
-        let mut events = Vec::new();
+        let mut events: Vec<Box<dyn DynEvent>> = Vec::new();
+        // An ancestor already resolved this gesture. Do not defer its replay.
+        if self.confirmed {
+            if mouse.state == MouseState::Released(MouseButton::Left) {self.confirmed = false;}
+            return prism::events![mouse];
+        }
         if mouse.state == MouseState::Pressed(MouseButton::Left) {
-            if let Some(cancel) = self.cancel() {events.push(Box::new(cancel) as Box<dyn DynEvent>);}
-            self.gesture = mouse.position.map(|position| (position, (0.0, 0.0)));
-            if mobile && mouse.position.is_some() {
+            if let Some(cancel) = self.cancel() {events.push(Box::new(cancel));}
+            if let Some(position) = mouse.position {
                 let id = Uuid::new_v4();
-                self.target = Some((id, false));
-                self.timer.reset(Duration::from_millis(150));
-                events.push(Box::new(event::Press::Pending {id, position: mouse.position}));
+                self.begin(id, position);
+                events.push(Box::new(event::Press::Pending {id, position: Some(position)}));
                 return events;
             }
         }
 
-        if matches!(mouse.state, MouseState::Moved | MouseState::Scroll(..)
-            | MouseState::Released(MouseButton::Left)) {
-            if let Some(travel) = self.travel_at(mouse.position) {
-                self.gesture.as_mut().unwrap().1 = travel;
+        // A slider can explicitly claim a pending gesture. Ordinary buttons,
+        // fields and rows cannot steal a gesture while scrolling is undecided.
+        if self.claimed() {
+            if mouse.state == MouseState::Released(MouseButton::Left) {
+                self.target = None;
+                self.gesture = None;
             }
-            if let Some((id, false)) = self.target {
-                let travel = self.travel().unwrap();
-                if mouse.position.is_none() || travel.0.powi(2) + travel.1.powi(2) > 12.0_f32.powi(2) {
-                    self.target = None;
-                    self.timer.cancel();
-                    events.push(Box::new(event::Press::Cancel(id)) as Box<dyn DynEvent>);
-                    if mouse.position.is_some() && matches!(mouse.state, MouseState::Scroll(..)) {
-                        mouse.state = MouseState::Scroll(-travel.0, -travel.1);
-                    }
-                } else if matches!(mouse.state, MouseState::Scroll(..)) {return events}
-            }
-            if mouse.position.is_none() {self.gesture = None;}
+            return prism::events![mouse];
         }
 
-        if mouse.state == MouseState::Released(MouseButton::Left) {
-            if let Some((id, false)) = self.target.take() {
-                events.push(Box::new(event::Press::Commit(id)) as Box<dyn DynEvent>);
+        if matches!(mouse.state, MouseState::Moved | MouseState::Scroll(..)
+            | MouseState::Released(MouseButton::Left))
+            && let Some(gesture) = &mut self.gesture
+        {
+            if let Some((x, y)) = mouse.position {
+                gesture.travel = (x - gesture.origin.0, y - gesture.origin.1);
             }
-            self.timer.cancel();
-            self.gesture = None;
+            let wheel = if let MouseState::Scroll(x, y) = mouse.state {
+                gesture.scroll.0 += x;
+                gesture.scroll.1 += y;
+                x != 0.0 || y != 0.0
+            } else {false};
+            let moved = gesture.travel.0.hypot(gesture.travel.1) > Self::TAP_SLOP
+                || gesture.scroll.0.hypot(gesture.scroll.1) > Self::TAP_SLOP;
+            if (mouse.position.is_none() || moved || (!mobile && wheel))
+                && let Some((id, _)) = self.target.take()
+            {
+                // Cancellation is sticky, even if the pointer returns to its origin.
+                events.push(Box::new(event::Press::Cancel(id)));
+                if matches!(mouse.state, MouseState::Scroll(..)) {
+                    mouse.state = MouseState::Scroll(gesture.scroll.0, gesture.scroll.1);
+                }
+            }
+            if mouse.state == MouseState::Released(MouseButton::Left) {
+                if let Some((id, _)) = self.target.take() {
+                    events.push(Box::new(event::Press::Commit(id)));
+                    events.push(Box::new(MouseEvent {
+                        position: Some(gesture.origin), state: MouseState::Pressed(MouseButton::Left),
+                    }));
+                    events.push(Box::new(mouse));
+                }
+                self.gesture = None;
+            } else if self.target.is_none() && matches!(mouse.state, MouseState::Scroll(..)) {
+                // Only the owning scroll container consumes this, not its controls.
+                events.push(Box::new(mouse));
+            }
+            return events;
         }
         events.push(Box::new(mouse));
         events
     }
 
+    fn begin(&mut self, id: Uuid, position: (f32, f32)) {
+        self.target = Some((id, false));
+        self.gesture = Some(Gesture {origin: position, travel: (0.0, 0.0), scroll: (0.0, 0.0)});
+    }
+
     pub fn press(&mut self, incoming: event::Press) -> Vec<Box<dyn DynEvent>> {
-        let mut events = Vec::new();
+        let mut events: Vec<Box<dyn DynEvent>> = Vec::new();
         match incoming {
             event::Press::Pending {id, position} => {
-                if let Some(cancel) = self.cancel() {events.push(Box::new(cancel) as Box<dyn DynEvent>);}
-                self.target = position.map(|_| (id, false));
-                self.gesture = position.map(|position| (position, (0.0, 0.0)));
+                if let Some(cancel) = self.cancel() {events.push(Box::new(cancel));}
+                if let Some(position) = position {self.begin(id, position);}
             }
-            event::Press::Commit(id) => {
+            event::Press::Commit(id) | event::Press::Cancel(id) => {
                 if self.target.is_some_and(|(target, _)| target == id) {
-                    self.timer.cancel();
+                    self.target = None;
+                    self.gesture = None;
+                    self.confirmed = matches!(incoming, event::Press::Commit(_));
                 }
             }
             event::Press::Claim(id) => {
                 if let Some((target, claimed)) = self.target.as_mut() && *target == id {
                     *claimed = true;
-                    self.timer.cancel();
-                }
-            }
-            event::Press::Cancel(id) => {
-                if self.target.is_some_and(|(target, _)| target == id) {
-                    self.target = None;
-                    self.timer.cancel();
                 }
             }
         }
@@ -529,27 +526,11 @@ impl DeferredPress {
     }
 
     pub fn cancel(&mut self) -> Option<event::Press> {
-        self.timer.cancel();
+        self.confirmed = false;
         self.gesture = None;
         self.target.take().map(|(id, _)| event::Press::Cancel(id))
     }
 
-    pub async fn next(&mut self) -> event::Press {
-        self.timer.next().await;
-        event::Press::Commit(self.target.unwrap().0)
-    }
-
-    pub fn travel(&self) -> Option<(f32, f32)> {self.gesture.map(|(_, travel)| travel)}
-    pub fn travel_at(&self, position: Option<(f32, f32)>) -> Option<(f32, f32)> {
-        let ((x, y), _) = self.gesture?;
-        position.map(|position| (position.0 - x, position.1 - y))
-    }
+    pub fn travel(&self) -> Option<(f32, f32)> {self.gesture.as_ref().map(|gesture| gesture.travel)}
     pub fn claimed(&self) -> bool {self.target.is_some_and(|(_, claimed)| claimed)}
-}
-
-#[derive(Debug, Clone)]
-struct PressState {
-    started: Instant,
-    origin: (f64, f64),
-    cancelled: bool,
 }
