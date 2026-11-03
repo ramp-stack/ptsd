@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::events as event;
 use crate::layout::{Column, Offset, Padding, ScrollAnchor, Size, Stack};
+use crate::navigation::NavigationChanged;
 
 /// Buttons react to presses; scroll containers decide when a press is a tap.
 #[derive(Debug, Component, Clone)]
@@ -311,7 +312,7 @@ impl<D: Drawable + Clone> OnEvent<KeyboardEvent> for TextInput<D> {
 }
 
 #[derive(Debug, Component, Clone)]
-#[events(event::Scrollable, MouseEvent, WindowEvent, event::Press)]
+#[events(event::Scrollable, MouseEvent, WindowEvent, event::Press, NavigationChanged)]
 pub struct Scrollable<D: Drawable + Clone>(Column, pub D, #[skip] DeferredPress);
 impl<D: Drawable + Clone> Scrollable<D> {
     pub fn scroll(&self) -> f32 {self.0.scroll()}
@@ -382,6 +383,16 @@ impl<D: Drawable + Clone> OnEvent<WindowEvent> for Scrollable<D> {
     }
 }
 
+#[on_event]
+impl<D: Drawable + Clone> OnEvent<NavigationChanged> for Scrollable<D> {
+    fn on(&mut self, _ctx: &mut Context, incoming: NavigationChanged) -> Vec<Box<dyn DynEvent>> {
+        let mut events = Vec::new();
+        if let Some(cancel) = self.2.cancel() {events.push(Box::new(cancel) as Box<dyn DynEvent>);}
+        events.push(Box::new(incoming));
+        events
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct Press {
     captured: Option<(Uuid, Option<(f32, f32)>)>,
@@ -410,11 +421,16 @@ impl Press {
 
 /// Gesture arbitration shared by vertical lists and horizontal media pickers.
 /// No timeout can prove a tap: an unclaimed gesture commits only when it ends.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct DeferredPress {
     target: Option<(Uuid, bool)>,
     gesture: Option<Gesture>,
     confirmed: bool,
+}
+
+impl Clone for DeferredPress {
+    // A cloned page is not participating in the original page's touch sequence.
+    fn clone(&self) -> Self {Self::default()}
 }
 
 #[derive(Debug, Clone)]
@@ -429,9 +445,11 @@ impl DeferredPress {
 
     pub fn mouse(&mut self, mobile: bool, mut mouse: MouseEvent) -> Vec<Box<dyn DynEvent>> {
         let mut events: Vec<Box<dyn DynEvent>> = Vec::new();
-        // An ancestor already resolved this gesture. Do not defer its replay.
-        if self.confirmed {
-            if mouse.state == MouseState::Released(MouseButton::Left) {self.confirmed = false;}
+        // An ancestor already resolved this gesture. Bypass only its replayed
+        // press, not later hardware input if a page changes before release.
+        if std::mem::take(&mut self.confirmed)
+            && mouse.state == MouseState::Pressed(MouseButton::Left)
+        {
             return prism::events![mouse];
         }
         if mouse.state == MouseState::Pressed(MouseButton::Left) {
@@ -466,8 +484,11 @@ impl DeferredPress {
                 gesture.scroll.1 += y;
                 x != 0.0 || y != 0.0
             } else {false};
-            let moved = gesture.travel.0.hypot(gesture.travel.1) > Self::TAP_SLOP
-                || gesture.scroll.0.hypot(gesture.scroll.1) > Self::TAP_SLOP;
+            let slop = if mobile {8.0} else {Self::TAP_SLOP};
+            let moved = gesture.travel.0.hypot(gesture.travel.1) > slop
+                || gesture.scroll.0.hypot(gesture.scroll.1) > slop;
+            // iOS reports even subpixel finger movement as Scroll. Accumulate it
+            // without moving the list or activating a row until intent is clear.
             if (mouse.position.is_none() || moved || (!mobile && wheel))
                 && let Some((id, _)) = self.target.take()
             {

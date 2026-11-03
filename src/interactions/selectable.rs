@@ -34,7 +34,7 @@ impl std::ops::DerefMut for Selectable {
 /// Selectable content used as `Selectable`'s public `Deref` target.
 #[derive(Component, Clone, Debug)]
 pub struct _Selectable(
-    Stack, Enum<Box<dyn Drawable>>, #[skip] Box<dyn Callback>, #[skip] bool, #[skip] bool,
+    Stack, Enum<Box<dyn Drawable>>, #[skip] Box<dyn Callback>, #[skip] bool, #[skip] bool, #[skip] bool,
 );
 impl _Selectable {
     pub fn new(
@@ -45,7 +45,15 @@ impl _Selectable {
         Self(Stack::default(), Enum::new(vec![
             ("default".to_string(), Box::new(default)),
             ("selected".to_string(), Box::new(selected)),
-        ], start.to_string()), Box::new(on_click), can_deselect, is_selected)
+        ], start.to_string()), Box::new(on_click), can_deselect, is_selected, true)
+    }
+
+    /// Let an owner confirm selection after an action has been accepted.
+    pub fn automatic_selection(&mut self, automatic: bool) {self.5 = automatic;}
+
+    pub fn set_selected(&mut self, selected: bool) {
+        self.4 = selected;
+        self.1.display(if selected {"selected"} else {"default"});
     }
 }
 
@@ -53,6 +61,13 @@ impl _Selectable {
 impl OnEvent<event::Selectable> for _Selectable {
     fn on(&mut self, ctx: &mut Context, event: event::Selectable) -> Vec<Box<dyn DynEvent>> {
         if let event::Selectable::Selected(selected) = &event {
+            if !self.5 {
+                if *selected {
+                    ctx.hardware.trigger_haptic();
+                    (self.2)(ctx);
+                }
+                return prism::events![event];
+            }
             if !selected {
                 self.1.display("default");
                 self.4 = false;

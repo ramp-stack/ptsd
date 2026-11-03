@@ -56,7 +56,10 @@ impl Drawable for Box<dyn Body> {
     }
 }
 
-pub trait Navigator: Drawable {}
+pub trait Navigator: Drawable {
+    /// Synchronize selection only after navigation has been accepted.
+    fn select_root(&mut self, _root: &str) {}
+}
 clone_trait_object!(Navigator);
 
 impl Drawable for Box<dyn Navigator> {
@@ -180,6 +183,9 @@ impl OnEvent<WindowEvent> for Interface {
 impl OnEvent<NavigationEvent> for Interface {
     fn on(&mut self, ctx: &mut Context, mut event: NavigationEvent) -> Vec<Box<dyn DynEvent>> {
         self.show_keyboard(ctx, ShowKeyboard::Hide);
+        if let NavigationEvent::Root(Some(root)) = &event && let Some(navigator) = self.navigator() {
+            navigator.inner().select_root(root);
+        }
         if let NavigationEvent::Push(_, excluded) = &mut event {
             *excluded = match self {
                 Interface::Desktop {navigator: Some(_), ..}
@@ -197,7 +203,9 @@ impl OnEvent<NavigationEvent> for Interface {
 impl OnEvent<ShowKeyboard> for Interface {
     fn on(&mut self, ctx: &mut Context, event: ShowKeyboard) -> Vec<Box<dyn DynEvent>> {
         self.show_keyboard(ctx, event);
-        prism::events![event]
+        if matches!(event, ShowKeyboard::Hide) {
+            prism::events![crate::events::TextInput::Focused(false), event]
+        } else {prism::events![event]}
     }
 }
 

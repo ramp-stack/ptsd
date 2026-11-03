@@ -1,6 +1,6 @@
 use prism::Context;
 use prism::drawable::{Component, Drawable};
-use prism::events::{on_event, DynEvent, OnEvent};
+use prism::events::{on_event, DynEvent, OnEvent, WindowEvent};
 
 use crate::display::Enum;
 use crate::emitters;
@@ -36,7 +36,7 @@ impl std::ops::DerefMut for InputField {
 /// Call `error` to change validation state together with its displayed content.
 #[derive(Debug, Component, Clone)]
 pub struct _InputField(
-    Stack, Enum<Box<dyn Drawable>>, pub Box<dyn Drawable>, #[skip] bool, #[skip] bool, #[skip] f32,
+    Stack, Enum<Box<dyn Drawable>>, pub Box<dyn Drawable>, #[skip] bool, #[skip] bool, #[skip] f32, #[skip] bool,
 );
 impl _InputField {
     pub fn new(
@@ -50,7 +50,7 @@ impl _InputField {
         ];
         if let Some(hover) = hover {items.push(("hover".to_string(), Box::new(hover)));}
         if let Some(error) = error {items.push(("error".to_string(), Box::new(error)));}
-        Self(layout, Enum::new(items, "default".to_string()), Box::new(content), false, false, 0.0)
+        Self(layout, Enum::new(items, "default".to_string()), Box::new(content), false, false, 0.0, false)
     }
 
     /// Logical pixels above the native keyboard that participate in swipe dismissal.
@@ -73,13 +73,29 @@ impl OnEvent<event::TextInput> for _InputField {
                 ctx.emit(ShowKeyboard::Show {dismiss_padding: self.5});
                 if !self.4 {ctx.hardware.trigger_haptic();}
                 self.4 = true;
+                self.6 = ctx.hardware.keyboard().visible();
                 self.1.display("focus");
             }
             event::TextInput::Focused(false) => {
                 self.4 = false;
+                self.6 = false;
                 self.1.display(if self.3 {"error"} else {"default"});
             }
             _ => {self.1.display("default");}
+        }
+        prism::events![event]
+    }
+}
+
+#[on_event]
+impl OnEvent<WindowEvent> for _InputField {
+    fn on(&mut self, ctx: &mut Context, event: WindowEvent) -> Vec<Box<dyn DynEvent>> {
+        if ctx.window.is_mobile && self.4 && matches!(event, WindowEvent::Resized(_)) {
+            let visible = ctx.hardware.keyboard().visible();
+            // Wait until the native keyboard has actually appeared. This avoids
+            // blurring a newly focused field during the opening animation.
+            if self.6 && !visible {ctx.emit(crate::events::TextInput::Focused(false));}
+            self.6 = visible;
         }
         prism::events![event]
     }
